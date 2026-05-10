@@ -141,6 +141,104 @@ router.post('/heroImage/upload', (req, res) => {
   });
 });
 
+/** Homepage: hero + hero link keys + brand focus in one DB round-trip */
+const HOME_SETTING_KEYS = ['heroImage', 'heroImageLinkType', 'heroImageLinkTargetId', 'brandFocus'];
+
+router.get('/home', async (req, res) => {
+  try {
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+
+    const rows = await db.Settings.findAll({
+      where: { key: HOME_SETTING_KEYS }
+    });
+
+    const result = {};
+    rows.forEach((s) => {
+      result[s.key] = {
+        key: s.key,
+        value: s.value,
+        updatedAt: s.updatedAt
+      };
+    });
+
+    if (!result.heroImage) {
+      result.heroImage = {
+        key: 'heroImage',
+        value: '/assets/images/ads/hero-ad.png',
+        updatedAt: new Date(0).toISOString()
+      };
+    }
+    if (!result.heroImageLinkType) {
+      result.heroImageLinkType = { key: 'heroImageLinkType', value: 'none' };
+    }
+    if (!result.heroImageLinkTargetId) {
+      result.heroImageLinkTargetId = { key: 'heroImageLinkTargetId', value: '' };
+    }
+    if (!result.brandFocus) {
+      result.brandFocus = { key: 'brandFocus', value: '' };
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching /settings/home:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Batch keys — must be registered before `/:key` so `/batch/...` is not captured as key=batch
+router.get('/batch/:keys', async (req, res) => {
+  try {
+    // Cache for 10 minutes
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+
+    const { keys } = req.params;
+    const keyArray = keys.split(',').map((k) => k.trim());
+
+    const settings = await db.Settings.findAll({
+      where: { key: keyArray }
+    });
+
+    // Convert to key-value object
+    const result = {};
+    settings.forEach((setting) => {
+      result[setting.key] = {
+        key: setting.key,
+        value: setting.value,
+        updatedAt: setting.updatedAt
+      };
+    });
+
+    // Add defaults for missing keys
+    keyArray.forEach((key) => {
+      if (!result[key]) {
+        if (key === 'heroImage') {
+          result[key] = {
+            key: 'heroImage',
+            value: '/assets/images/ads/hero-ad.png',
+            updatedAt: new Date(0).toISOString()
+          };
+        } else if (key === 'seoMetaTitle') {
+          result[key] = {
+            key: 'seoMetaTitle',
+            value: 'Alcohol Delivery Nairobi - Dial A Drink Kenya - 24 hours Fast Delivery'
+          };
+        } else if (key === 'seoMetaDescription') {
+          result[key] = {
+            key: 'seoMetaDescription',
+            value:
+              'Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order.'
+          };
+        }
+      }
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching batch settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
 // Get setting by key
 router.get('/:key', async (req, res) => {
   try {
@@ -289,60 +387,6 @@ router.put('/:key', async (req, res) => {
     res.json(setting);
   } catch (error) {
     res.status(500).json({ error: error.message });
-  }
-});
-
-// Get all settings
-// Get multiple settings in one query (for homepage optimization)
-router.get('/batch/:keys', async (req, res) => {
-  try {
-    // Cache for 10 minutes
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
-    
-    const { keys } = req.params;
-    const keyArray = keys.split(',').map(k => k.trim());
-    
-    const settings = await db.Settings.findAll({
-      where: { key: keyArray }
-    });
-    
-    // Convert to key-value object
-    const result = {};
-    settings.forEach(setting => {
-      result[setting.key] = {
-        key: setting.key,
-        value: setting.value,
-        updatedAt: setting.updatedAt
-      };
-    });
-    
-    // Add defaults for missing keys
-    keyArray.forEach(key => {
-      if (!result[key]) {
-        if (key === 'heroImage') {
-          result[key] = {
-            key: 'heroImage',
-            value: '/assets/images/ads/hero-ad.png',
-            updatedAt: new Date(0).toISOString()
-          };
-        } else if (key === 'seoMetaTitle') {
-          result[key] = {
-            key: 'seoMetaTitle',
-            value: 'Alcohol Delivery Nairobi - Dial A Drink Kenya - 24 hours Fast Delivery'
-          };
-        } else if (key === 'seoMetaDescription') {
-          result[key] = {
-            key: 'seoMetaDescription',
-            value: 'Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order.'
-          };
-        }
-      }
-    });
-    
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching batch settings:', error);
-    res.status(500).json({ error: 'Failed to fetch settings' });
   }
 });
 

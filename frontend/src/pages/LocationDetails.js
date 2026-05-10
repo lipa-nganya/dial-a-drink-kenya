@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -18,7 +18,8 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 
-const LOCATION_DRINKS_CHUNK = 200;
+/** Server page size — matches backend max clamp; fetch more only when user scrolls */
+const CATALOG_PAGE_SIZE = 200;
 
 const LocationDetails = () => {
   const { locationName } = useParams();
@@ -36,14 +37,154 @@ const LocationDetails = () => {
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [itemsToShow, setItemsToShow] = useState(16); // Initial items to show
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+  /** More rows available from API for current filters (pagination) */
+  const [hasMoreCatalog, setHasMoreCatalog] = useState(false);
+  const [loadingCatalogMore, setLoadingCatalogMore] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   const itemsPerLoad = 16; // Load 16 items at a time
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  const nextCatalogOffsetRef = useRef(0);
+  const catalogAbortRef = useRef(null);
+
   useEffect(() => {
     fetchLocation();
-    fetchData();
   }, [locationName]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm.trim()), 350);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const categoriesResponse = await api.get('/categories');
+        let categoriesArray = [];
+        if (categoriesResponse.data) {
+          if (Array.isArray(categoriesResponse.data)) {
+            categoriesArray = categoriesResponse.data;
+          } else if (categoriesResponse.data.data && Array.isArray(categoriesResponse.data.data)) {
+            categoriesArray = categoriesResponse.data.data;
+          }
+        }
+        if (!Array.isArray(categoriesArray)) {
+          categoriesArray = [];
+        }
+        categoriesArray = categoriesArray.filter(
+          (cat) => cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
+        );
+        if (!cancelled) setCategories(categoriesArray);
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        if (!cancelled) setCategories([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const buildDrinksListParams = useCallback(
+    (offset) => {
+      const params = {
+        ...CUSTOMER_DRINKS_LIST_PARAMS,
+        limit: CATALOG_PAGE_SIZE,
+        offset: Math.max(0, offset),
+      };
+
+      const catRaw = searchParams.get('category');
+      let categoryId = 0;
+      if (catRaw !== null && catRaw !== '') {
+        const p = parseInt(catRaw, 10);
+        if (!Number.isNaN(p)) categoryId = p;
+      }
+
+      const subRaw = searchParams.get('subcategory');
+      let subcategoryId = 0;
+      if (subRaw !== null && subRaw !== '') {
+        const p = parseInt(subRaw, 10);
+        if (!Number.isNaN(p)) subcategoryId = p;
+      }
+
+      if (debouncedSearch) {
+        params.search = debouncedSearch;
+      }
+
+      if (categoryId === -1) {
+        params.popular = 'true';
+      } else if (categoryId > 0) {
+        params.category = categoryId;
+        if (subcategoryId > 0) {
+          params.subCategoryId = subcategoryId;
+        }
+      }
+
+      return params;
+    },
+    [searchParams, debouncedSearch]
+  );
+
+  const fetchCatalogReset = useCallback(async () => {
+    catalogAbortRef.current?.abort();
+    const ac = new AbortController();
+    catalogAbortRef.current = ac;
+
+    setLoading(true);
+    setHasMoreCatalog(false);
+    nextCatalogOffsetRef.current = 0;
+
+    try {
+      const params = buildDrinksListParams(0);
+      const response = await api.get('/drinks', { params, signal: ac.signal });
+      const chunk = Array.isArray(response.data) ? response.data : [];
+      if (ac.signal.aborted) return;
+      setDrinks(chunk);
+      nextCatalogOffsetRef.current = chunk.length;
+      setHasMoreCatalog(chunk.length === CATALOG_PAGE_SIZE);
+    } catch (error) {
+      if (error?.code === 'ERR_CANCELED' || error?.name === 'CanceledError') return;
+      console.error('Error fetching drinks:', error);
+      setDrinks([]);
+      setHasMoreCatalog(false);
+    } finally {
+      if (!ac.signal.aborted) setLoading(false);
+    }
+  }, [buildDrinksListParams]);
+
+  useEffect(() => {
+    fetchCatalogReset();
+    return () => catalogAbortRef.current?.abort();
+  }, [locationName, searchParams, debouncedSearch, fetchCatalogReset]);
+
+  const loadMoreCatalog = useCallback(async () => {
+    if (!hasMoreCatalog || loadingCatalogMore || loading) return;
+    const offset = nextCatalogOffsetRef.current;
+
+    setLoadingCatalogMore(true);
+    try {
+      const params = buildDrinksListParams(offset);
+      const response = await api.get('/drinks', { params });
+      const chunk = Array.isArray(response.data) ? response.data : [];
+      if (chunk.length === 0) {
+        setHasMoreCatalog(false);
+        return;
+      }
+      setDrinks((prev) => {
+        const prevIds = new Set(prev.map((d) => d?.id));
+        const unique = chunk.filter((d) => d && !prevIds.has(d.id));
+        return unique.length > 0 ? [...prev, ...unique] : prev;
+      });
+      nextCatalogOffsetRef.current = offset + chunk.length;
+      setHasMoreCatalog(chunk.length === CATALOG_PAGE_SIZE);
+    } catch (error) {
+      console.error('Error loading more drinks:', error);
+      setHasMoreCatalog(false);
+    } finally {
+      setLoadingCatalogMore(false);
+    }
+  }, [hasMoreCatalog, loadingCatalogMore, loading, buildDrinksListParams]);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -69,15 +210,19 @@ const LocationDetails = () => {
     }
   }, [searchParams]);
   
-  // Fetch subcategories when category changes
+  const prevCategoryForSubResetRef = useRef(null);
+
+  // Fetch subcategories when category changes; only clear subcategory when category actually changes (not on URL hydrate)
   useEffect(() => {
     if (selectedCategory > 0) {
       fetchSubcategories(selectedCategory);
-      // Reset subcategory when category changes (but don't update URL here to avoid loops)
-      if (selectedSubcategory > 0) {
+      const prev = prevCategoryForSubResetRef.current;
+      if (prev !== null && prev !== selectedCategory && selectedSubcategory > 0) {
         setSelectedSubcategory(0);
       }
+      prevCategoryForSubResetRef.current = selectedCategory;
     } else {
+      prevCategoryForSubResetRef.current = selectedCategory;
       setSubcategories([]);
       setSelectedSubcategory(0);
     }
@@ -87,7 +232,7 @@ const LocationDetails = () => {
   useEffect(() => {
     filterDrinks();
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
+  }, [drinks]);
 
   const fetchLocation = async () => {
     try {
@@ -107,65 +252,6 @@ const LocationDetails = () => {
     }
   };
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const categoriesPromise = api.get('/categories');
-
-      const firstDrinksResponse = await api.get('/drinks', {
-        params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: LOCATION_DRINKS_CHUNK, offset: 0 }
-      });
-      let allDrinks = Array.isArray(firstDrinksResponse.data) ? firstDrinksResponse.data : [];
-      setDrinks(allDrinks);
-
-      let offset = allDrinks.length;
-      while (allDrinks.length > 0 && offset > 0) {
-        const nextResponse = await api.get('/drinks', {
-          params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: LOCATION_DRINKS_CHUNK, offset }
-        });
-        const nextChunk = Array.isArray(nextResponse.data) ? nextResponse.data : [];
-        if (nextChunk.length === 0) break;
-        offset += nextChunk.length;
-        allDrinks = [...allDrinks, ...nextChunk];
-        setDrinks((prev) => {
-          const prevIds = new Set(prev.map((d) => d?.id));
-          const uniqueNext = nextChunk.filter((d) => d && !prevIds.has(d.id));
-          return uniqueNext.length > 0 ? [...prev, ...uniqueNext] : prev;
-        });
-        if (nextChunk.length < LOCATION_DRINKS_CHUNK) break;
-      }
-
-      const categoriesResponse = await categoriesPromise;
-      
-      // Defensive: Ensure categories is always an array
-      let categoriesArray = [];
-      if (categoriesResponse.data) {
-        if (Array.isArray(categoriesResponse.data)) {
-          categoriesArray = categoriesResponse.data;
-        } else if (categoriesResponse.data.data && Array.isArray(categoriesResponse.data.data)) {
-          categoriesArray = categoriesResponse.data.data;
-        }
-      }
-      if (!Array.isArray(categoriesArray)) {
-        console.warn('Categories response is not an array:', categoriesResponse.data);
-        categoriesArray = [];
-      }
-      
-      // Filter out "Test" and "Popular" categories
-      categoriesArray = categoriesArray.filter(cat => 
-        cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
-      );
-      
-      setCategories(categoriesArray);
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setDrinks([]);
-      setCategories([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const fetchSubcategories = async (categoryId) => {
     try {
       const response = await api.get(`/subcategories?categoryId=${categoryId}`);
@@ -176,52 +262,19 @@ const LocationDetails = () => {
     }
   };
 
+  /** Catalog filtering is done server-side (category, popular, subCategoryId, search); we only sort for display */
   const filterDrinks = () => {
-    // Safety check: ensure drinks is an array
     if (!Array.isArray(drinks)) {
       setFilteredDrinks([]);
       return;
     }
 
-    // Filter out any null/undefined drinks
-    let filtered = drinks.filter(drink => drink != null);
+    const filtered = drinks.filter((drink) => drink != null);
 
-    // Filter by search term
-    if (searchTerm) {
-      filtered = filtered.filter(drink => {
-        if (!drink) return false;
-        const nameMatch = drink.name && typeof drink.name === 'string' 
-          ? drink.name.toLowerCase().includes(searchTerm.toLowerCase()) 
-          : false;
-        const descMatch = drink.description && typeof drink.description === 'string'
-          ? drink.description.toLowerCase().includes(searchTerm.toLowerCase())
-          : false;
-        return nameMatch || descMatch;
-      });
-    }
-
-    // Filter by category or popular
-    if (selectedCategory === -1) {
-      // Popular tab selected
-      filtered = filtered.filter(drink => drink && drink.isPopular);
-    } else if (selectedCategory > 0) {
-      // Regular category selected
-      filtered = filtered.filter(drink => drink && drink.categoryId === selectedCategory);
-      
-      // Filter by subcategory if one is selected
-      if (selectedSubcategory > 0) {
-        filtered = filtered.filter(drink => drink && drink.subCategoryId === selectedSubcategory);
-      }
-    }
-    // If selectedCategory === 0, show all drinks (no filter)
-
-    // Sort: available items first, then by name
     filtered.sort((a, b) => {
-      // First sort by availability (available items first)
       if (a.isAvailable !== b.isAvailable) {
-        return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+        return b.isAvailable ? 1 : -1;
       }
-      // Then sort by name alphabetically
       const nameA = (a.name || '').toLowerCase();
       const nameB = (b.name || '').toLowerCase();
       return nameA.localeCompare(nameB);
@@ -240,27 +293,35 @@ const LocationDetails = () => {
     setSearchParams(params);
   };
 
-  // Lazy loading: Load more items when scrolling
+  // Reveal more cards from the current in-memory list, then fetch the next API page when needed
   useEffect(() => {
     const handleScroll = () => {
-      if (isLoadingMore) return;
-      
-      // Check if user is near bottom of page
+      if (isLoadingMore || loadingCatalogMore) return;
+
       if (window.innerHeight + window.scrollY >= document.documentElement.offsetHeight - 1000) {
         if (itemsToShow < filteredDrinks.length) {
           setIsLoadingMore(true);
-          // Simulate loading delay for better UX
           setTimeout(() => {
-            setItemsToShow(prev => Math.min(prev + itemsPerLoad, filteredDrinks.length));
+            setItemsToShow((prev) => Math.min(prev + itemsPerLoad, filteredDrinks.length));
             setIsLoadingMore(false);
           }, 300);
+        } else if (hasMoreCatalog) {
+          loadMoreCatalog();
         }
       }
     };
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [itemsToShow, filteredDrinks.length, isLoadingMore, itemsPerLoad]);
+  }, [
+    itemsToShow,
+    filteredDrinks.length,
+    isLoadingMore,
+    itemsPerLoad,
+    hasMoreCatalog,
+    loadingCatalogMore,
+    loadMoreCatalog,
+  ]);
 
   // Reset items to show when filtered drinks change
   useEffect(() => {
@@ -493,15 +554,14 @@ const LocationDetails = () => {
               ))}
             </Box>
             
-            {/* Loading indicator for lazy loading */}
-            {isLoadingMore && (
+            {/* Loading indicator for lazy loading (more cards) or next catalog page */}
+            {(isLoadingMore || loadingCatalogMore) && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
                 <CircularProgress size={40} />
               </Box>
             )}
             
-            {/* Show message when all items are loaded */}
-            {!isLoadingMore && itemsToShow >= filteredDrinks.length && filteredDrinks.length > itemsPerLoad && (
+            {!isLoadingMore && !loadingCatalogMore && itemsToShow >= filteredDrinks.length && filteredDrinks.length > itemsPerLoad && !hasMoreCatalog && (
               <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
                 <Typography variant="body2" color="text.secondary">
                   All {filteredDrinks.length} items loaded

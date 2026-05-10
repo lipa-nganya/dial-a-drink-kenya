@@ -92,6 +92,14 @@ router.get('/', async (req, res) => {
     if (category) {
       whereClause.categoryId = category;
     }
+
+    const subCategoryIdParam = req.query.subCategoryId ?? req.query.subcategory;
+    if (subCategoryIdParam !== undefined && subCategoryIdParam !== '') {
+      const scid = parseInt(subCategoryIdParam, 10);
+      if (Number.isFinite(scid)) {
+        whereClause.subCategoryId = scid;
+      }
+    }
     
     if (brandId) {
       whereClause.brandId = brandId;

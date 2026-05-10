@@ -28,6 +28,9 @@ const getInitialHeroImage = () => {
   return '/assets/images/ads/hero-ad.png';
 };
 
+/** Local dev: one `/settings/home` call replaces hero + hero links + brandFocus setting reads */
+const USE_HOME_SETTINGS_BUNDLE = process.env.NODE_ENV === 'development';
+
 const Home = () => {
   const [popularDrinks, setPopularDrinks] = useState([]);
   const [popularDrinksLoading, setPopularDrinksLoading] = useState(true);
@@ -48,10 +51,30 @@ const Home = () => {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    fetchHeroImage();
-    fetchHeroLinkSettings();
+    const loadSettingsAndBrandFocus = async () => {
+      if (USE_HOME_SETTINGS_BUNDLE) {
+        heroLoadAttemptRef.current = 0;
+        try {
+          const { data: home } = await api.get('/settings/home', {
+            params: { _t: Date.now() }
+          });
+          applyHeroImageFromSettingRow(home.heroImage);
+          await applyHeroLinkSettingsFromRows(home.heroImageLinkType, home.heroImageLinkTargetId);
+          await fetchBrandFocusDrinks(home.brandFocus?.value ?? '');
+        } catch (err) {
+          console.error('Home settings bundle failed, using separate settings requests:', err);
+          await Promise.all([fetchHeroImage(), fetchHeroLinkSettings()]);
+          await fetchBrandFocusDrinks();
+        }
+      } else {
+        fetchHeroImage();
+        fetchHeroLinkSettings();
+        fetchBrandFocusDrinks();
+      }
+    };
+
+    loadSettingsAndBrandFocus();
     fetchPopularDrinks();
-    fetchBrandFocusDrinks();
     fetchLimitedTimeOffers();
   }, []);
 
@@ -77,37 +100,38 @@ const Home = () => {
     return `${backendUrl}${imagePath}`;
   };
 
+  const applyHeroImageFromSettingRow = (row) => {
+    if (!row || !row.value) return;
+    const imageUrl = getImageUrl(row.value);
+    const nextUpdatedAt = row.updatedAt || null;
+
+    heroImageUrlRef.current = imageUrl;
+    heroImageUpdatedAtRef.current = nextUpdatedAt;
+
+    const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
+    const tokenBase = Number.isFinite(updatedMs) ? updatedMs : 0;
+    const separator = imageUrl.includes('?') ? '&' : '?';
+    const cacheBustedUrl = `${imageUrl}${separator}_v=${tokenBase}`;
+    setHeroImage(cacheBustedUrl);
+    try {
+      window.localStorage.setItem(HERO_IMAGE_CACHE_KEY, cacheBustedUrl);
+      window.localStorage.setItem(HERO_IMAGE_UPDATED_AT_KEY, String(nextUpdatedAt || ''));
+    } catch (_) {
+      // Ignore storage write failures (private mode, quota exceeded, etc.)
+    }
+  };
+
   const fetchHeroImage = async () => {
     heroLoadAttemptRef.current = 0;
     try {
-      // Bust HTTP caches on the settings response itself
       const response = await api.get('/settings/heroImage', {
         params: { _t: Date.now() }
       });
       if (response.data && response.data.value) {
-        const imageUrl = getImageUrl(response.data.value);
-        const nextUpdatedAt = response.data.updatedAt || null;
-
-        heroImageUrlRef.current = imageUrl;
-        heroImageUpdatedAtRef.current = nextUpdatedAt;
-
-        // Use stable version token so repeat visits can cache hero image.
-        // updatedAt change invalidates cache when admins update the hero asset.
-        const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
-        const tokenBase = Number.isFinite(updatedMs) ? updatedMs : 0;
-        const separator = imageUrl.includes('?') ? '&' : '?';
-        const cacheBustedUrl = `${imageUrl}${separator}_v=${tokenBase}`;
-        setHeroImage(cacheBustedUrl);
-        try {
-          window.localStorage.setItem(HERO_IMAGE_CACHE_KEY, cacheBustedUrl);
-          window.localStorage.setItem(HERO_IMAGE_UPDATED_AT_KEY, String(nextUpdatedAt || ''));
-        } catch (_) {
-          // Ignore storage write failures (private mode, quota exceeded, etc.)
-        }
+        applyHeroImageFromSettingRow(response.data);
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
-      // Keep current hero image to avoid visual thrash and late image swaps.
     }
   };
 
@@ -127,27 +151,32 @@ const Home = () => {
     e.target.src = `${fb}${sep}_err=1`;
   };
 
+  const applyHeroLinkSettingsFromRows = async (typeRow, targetRow) => {
+    const typeVal = typeRow?.value || 'none';
+    const targetId = targetRow?.value != null ? String(targetRow.value) : '';
+    setHeroLinkType(typeVal);
+    setHeroLinkTargetId(targetId);
+
+    if (typeVal === 'brand' && targetId) {
+      try {
+        const brandRes = await api.get(`/brands/${targetId}`);
+        setHeroBrandPath(buildBrandPath(brandRes.data));
+      } catch (brandError) {
+        console.error('Error resolving hero brand slug:', brandError);
+        setHeroBrandPath(`/brands/${targetId}`);
+      }
+    } else {
+      setHeroBrandPath('');
+    }
+  };
+
   const fetchHeroLinkSettings = async () => {
     try {
       const [typeRes, targetRes] = await Promise.all([
         api.get('/settings/heroImageLinkType').catch(() => ({ data: { value: 'none' } })),
         api.get('/settings/heroImageLinkTargetId').catch(() => ({ data: { value: '' } }))
       ]);
-      setHeroLinkType(typeRes.data?.value || 'none');
-      const targetId = targetRes.data?.value != null ? String(targetRes.data.value) : '';
-      setHeroLinkTargetId(targetId);
-
-      if ((typeRes.data?.value || 'none') === 'brand' && targetId) {
-        try {
-          const brandRes = await api.get(`/brands/${targetId}`);
-          setHeroBrandPath(buildBrandPath(brandRes.data));
-        } catch (brandError) {
-          console.error('Error resolving hero brand slug:', brandError);
-          setHeroBrandPath(`/brands/${targetId}`);
-        }
-      } else {
-        setHeroBrandPath('');
-      }
+      await applyHeroLinkSettingsFromRows(typeRes.data, targetRes.data);
     } catch (error) {
       console.error('Error fetching hero link settings:', error);
     }
@@ -168,16 +197,20 @@ const Home = () => {
     }
   };
 
-  const fetchBrandFocusDrinks = async () => {
+  /**
+   * @param {string|undefined} prefetchedBrandFocusId - from `/settings/home`; omit to fetch `/settings/brandFocus`
+   */
+  const fetchBrandFocusDrinks = async (prefetchedBrandFocusId) => {
     try {
       setBrandFocusLoading(true);
-      // Get the selected brand focus from settings
-      const brandFocusResponse = await api.get('/settings/brandFocus');
-      const brandFocusId = brandFocusResponse.data?.value;
-      
+      let brandFocusId = prefetchedBrandFocusId;
+      if (brandFocusId === undefined) {
+        const brandFocusResponse = await api.get('/settings/brandFocus');
+        brandFocusId = brandFocusResponse.data?.value;
+      }
+
       if (brandFocusId) {
-        // Use backend filtering to get only brand focus drinks for this brand
-        const brandFocusIdNum = parseInt(brandFocusId);
+        const brandFocusIdNum = parseInt(brandFocusId, 10);
         const drinksResponse = await api.get('/drinks', {
           params: {
             ...CUSTOMER_DRINKS_LIST_PARAMS,
@@ -186,7 +219,6 @@ const Home = () => {
           }
         });
         const filtered = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
-        console.log('Brand Focus - Setting ID:', brandFocusIdNum, 'Filtered drinks:', filtered.length, filtered.map(d => ({ id: d.id, name: d.name, brandId: d.brandId })));
         setBrandFocusDrinks(filtered);
       } else {
         setBrandFocusDrinks([]);
