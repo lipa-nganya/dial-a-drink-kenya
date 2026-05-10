@@ -23,6 +23,7 @@ steps:
           -t "$${IMG}:$SHORT_SHA" \
           -t "$${IMG}:latest" \
           --build-arg REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api \
+          --build-arg REACT_APP_ADMIN_SITE_URL=${_ADMIN_SITE_URL} \
           --build-arg REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY} \
           .
         docker push "$${IMG}:$SHORT_SHA"
@@ -59,3 +60,4 @@ timeout: '1200s'
 
 substitutions:
   _GOOGLE_MAPS_API_KEY: ''
+  _ADMIN_SITE_URL: 'https://dialadrink-admin.thewolfgang.tech'

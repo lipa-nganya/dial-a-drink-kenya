@@ -5,7 +5,7 @@
 /offers    /index.html   200
 /menu      /index.html   200
 /cart      /index.html   200
-/admin     /index.html   200
+# /admin/* → handled in SPA by RedirectToAdminApp (browser redirect to admin-frontend host)
 
 # Fallback for any other routes
 /*    /index.html   200
