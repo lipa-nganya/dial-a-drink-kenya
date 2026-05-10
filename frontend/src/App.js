@@ -5,15 +5,13 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { Snackbar, Alert, Box } from '@mui/material';
 import { CartProvider, useCart } from './contexts/CartContext';
 import { CustomerProvider } from './contexts/CustomerContext';
-import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
-import AdminHeader from './components/AdminHeader';
 import Footer from './components/Footer';
 import FloatingHelpButton from './components/FloatingHelpButton';
 import FloatingCallButton from './components/FloatingCallButton';
-import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
+import RedirectToAdminApp from './components/RedirectToAdminApp';
 import CanonicalHead from './components/CanonicalHead';
 import SEOHead from './components/SEOHead';
 import RoutePageSkeleton from './components/RoutePageSkeleton';
@@ -42,15 +40,6 @@ const DeliveryLocations = lazy(() => import('./pages/DeliveryLocations'));
 const LocationDetails = lazy(() => import('./pages/LocationDetails'));
 const Pricelist = lazy(() => import('./pages/Pricelist'));
 const Sitemap = lazy(() => import('./pages/Sitemap'));
-const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
-const Orders = lazy(() => import('./pages/admin/Orders'));
-const Inventory = lazy(() => import('./pages/admin/Inventory'));
-const Transactions = lazy(() => import('./pages/admin/Transactions'));
-const Notifications = lazy(() => import('./pages/admin/Notifications'));
-const Drivers = lazy(() => import('./pages/admin/Drivers'));
-const Payables = lazy(() => import('./pages/admin/Payables'));
-const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
-
 const getMUITheme = () => {
   // Always use light mode for customer site
   const colors = {
@@ -186,8 +175,7 @@ const getMUITheme = () => {
 
 function AppContent() {
   const location = useLocation();
-  const isAdminRoute = location.pathname.startsWith('/admin');
-  const isAdminLogin = location.pathname === '/admin/login';
+  const isAdminRedirectRoute = location.pathname.startsWith('/admin');
   const { snackbarOpen, setSnackbarOpen, snackbarMessage } = useCart();
   const muiTheme = getMUITheme();
 
@@ -205,22 +193,23 @@ function AppContent() {
           flexDirection: 'column',
         }}
       >
-        {isAdminRoute && !isAdminLogin && <AdminHeader />}
-        {!isAdminRoute && <Header />}
-        {!isAdminRoute && <FloatingHelpButton />}
-        {!isAdminRoute && <FloatingCallButton />}
+        {!isAdminRedirectRoute && <Header />}
+        {!isAdminRedirectRoute && <FloatingHelpButton />}
+        {!isAdminRedirectRoute && <FloatingCallButton />}
         <Box
           component="main"
           sx={{
             flex: '1 0 auto',
-            // Reserve space for fixed header + categories bar on desktop
-            pt: { xs: 0, md: '104px' },
+            // Reserve space for fixed header + categories bar on desktop (not on /admin → redirect)
+            pt: { xs: 0, md: isAdminRedirectRoute ? 0 : '104px' },
           }}
         >
         <Suspense fallback={<RoutePageSkeleton />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          {/* Standalone admin (admin-frontend). Must be before /:categorySlug or "admin" is treated as a category. */}
+          <Route path="/admin/*" element={<RedirectToAdminApp />} />
           <Route path="/:categorySlug" element={<Menu />} />
           <Route path="/menu/category/:categorySlug" element={<Menu />} />
           {/* Old product route - kept for backward compatibility and redirects */}
@@ -250,19 +239,12 @@ function AppContent() {
           <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
           {/* New category-based product route: /:categorySlug/:productSlug - MUST be last to avoid conflicts */}
           <Route path="/:categorySlug/:productSlug" element={<ProductPage />} />
-          {/* Admin Routes */}
-          <Route path="/admin/login" element={<AdminLogin />} />
-          <Route path="/admin" element={<PrivateRoute><AdminOverview /></PrivateRoute>} />
-          <Route path="/admin/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
-          <Route path="/admin/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
-          <Route path="/admin/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
-          <Route path="/admin/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
-          <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
-          <Route path="/admin/payables" element={<PrivateRoute><Payables /></PrivateRoute>} />
         </Routes>
         </Suspense>
         </Box>
-        {!isAdminRoute && location.pathname !== '/cart' && location.pathname !== '/order-tracking' && <Footer />}
+        {!isAdminRedirectRoute &&
+          location.pathname !== '/cart' &&
+          location.pathname !== '/order-tracking' && <Footer />}
         
         {/* Cart Snackbar */}
         <Snackbar
@@ -289,11 +271,9 @@ function App() {
     <ThemeProvider>
       <CartProvider>
         <CustomerProvider>
-          <AdminProvider>
-            <Router>
-              <AppContent />
-            </Router>
-          </AdminProvider>
+          <Router>
+            <AppContent />
+          </Router>
         </CustomerProvider>
       </CartProvider>
     </ThemeProvider>
