@@ -174,11 +174,37 @@ const AddPurchase = () => {
     if (Array.isArray(products) && products.length > 0) return;
     setProductsLoading(true);
     try {
+      // Keep the same primary behavior as POS: load from full /admin/drinks.
       const prodRes = await api.get('/admin/drinks');
       setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
     } catch (err) {
-      console.error('Error loading products for purchase', err);
-      setError((prev) => prev || err.response?.data?.error || err.message || 'Failed to load products.');
+      // Fallback to slim paged fetch only if primary POS-like endpoint fails.
+      try {
+        const all = [];
+        const pageSize = 500;
+        let offset = 0;
+        let keepLoading = true;
+
+        while (keepLoading) {
+          // eslint-disable-next-line no-await-in-loop
+          const prodRes = await api.get('/admin/drinks', {
+            params: { light: 1, summary: 1, limit: pageSize, offset }
+          });
+          const chunk = Array.isArray(prodRes.data) ? prodRes.data : [];
+          if (chunk.length === 0) {
+            keepLoading = false;
+            break;
+          }
+          all.push(...chunk);
+          offset += chunk.length;
+          keepLoading = chunk.length === pageSize;
+        }
+
+        setProducts(all);
+      } catch (fallbackErr) {
+        console.error('Error loading products for purchase', fallbackErr);
+        setError((prev) => prev || fallbackErr.response?.data?.error || fallbackErr.message || 'Failed to load products.');
+      }
     } finally {
       setProductsLoading(false);
     }
