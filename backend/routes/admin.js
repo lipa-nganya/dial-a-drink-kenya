@@ -1828,7 +1828,6 @@ router.put('/drinks/:id', async (req, res) => {
 
     // Only set special fields if the drinks table has the columns (use same attribute list we used to load the drink)
     const drinksHasNbv = drinkAttributes && drinkAttributes.includes('nbv');
-    const drinksHasSoldOut = drinkAttributes && drinkAttributes.includes('isSoldOut');
 
     const updatePayload = {
       name: normalizedName,
@@ -1883,7 +1882,7 @@ router.put('/drinks/:id', async (req, res) => {
     } else if (drinksHasNbv) {
       updatePayload.nbv = drink.nbv;
     }
-    if (drinksHasSoldOut) {
+    if (Object.prototype.hasOwnProperty.call(req.body, 'isSoldOut')) {
       updatePayload.isSoldOut =
         typeof isSoldOut === 'boolean' ? isSoldOut : (drink.isSoldOut === true);
     }
@@ -1912,8 +1911,14 @@ router.put('/drinks/:id', async (req, res) => {
     } catch (updateErr) {
       const msg = (updateErr && updateErr.message) ? updateErr.message : '';
       const isNbvColumnError = /column.*nbv|nbv.*column|does not exist/i.test(msg);
+      const isSoldOutColumnError = /column.*issoldout|issoldout.*column|column.*isSoldOut|isSoldOut.*column|does not exist/i.test(msg);
       if (isNbvColumnError && updatePayload.hasOwnProperty('nbv')) {
         delete updatePayload.nbv;
+      }
+      if (isSoldOutColumnError && updatePayload.hasOwnProperty('isSoldOut')) {
+        delete updatePayload.isSoldOut;
+      }
+      if ((isNbvColumnError || isSoldOutColumnError) && Object.keys(updatePayload).length > 0) {
         await drink.update(updatePayload);
       } else {
         throw updateErr;

@@ -54,6 +54,17 @@ function parseJsonIfString(value) {
   return value;
 }
 
+function toBoolean(value, fallback = false) {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 'true' || v === '1' || v === 'yes') return true;
+    if (v === 'false' || v === '0' || v === 'no') return false;
+  }
+  return fallback;
+}
+
 // Normalize capacityPricing from API (may have price only, or originalPrice/currentPrice)
 function normalizeCapacityPricingForForm(capacityPricing) {
   const raw = parseJsonIfString(capacityPricing ?? null);
@@ -139,9 +150,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     setFormData({
       name: d.name || '',
       description: d.description || '',
-      isAvailable: d.isAvailable !== undefined ? d.isAvailable : true,
+      isAvailable: toBoolean(d.isAvailable, true),
       isPublished: d.isPublished !== undefined ? d.isPublished : true,
-      isSoldOut: d.isSoldOut === true,
+      isSoldOut: toBoolean(d.isSoldOut, false),
       isPopular: d.isPopular || false,
       isBrandFocus: d.isBrandFocus || false,
       limitedTimeOffer: d.limitedTimeOffer || false,

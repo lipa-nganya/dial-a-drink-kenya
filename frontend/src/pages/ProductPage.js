@@ -62,6 +62,17 @@ const PRODUCT_CACHE_TTL_MS = 60 * 1000;
 const productFetchCache = new Map();
 const productFetchInFlight = new Map();
 
+const toBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') {
+    const v = value.trim().toLowerCase();
+    if (v === 'true' || v === '1' || v === 'yes') return true;
+    if (v === 'false' || v === '0' || v === 'no') return false;
+  }
+  return fallback;
+};
+
 const ProductPage = () => {
   // Support both URL formats:
   // New: /:categorySlug/:productSlug (e.g., /wine/1659-sauvignon-blanc-750ml)
@@ -589,7 +600,7 @@ const ProductPage = () => {
 
   const handleAddToCart = () => {
     if (!product) return;
-    if (product.isSoldOut === true) {
+    if (toBoolean(product.isSoldOut, false)) {
       alert('This item is sold out');
       return;
     }
@@ -842,7 +853,7 @@ const ProductPage = () => {
   const resolvedPrice = selectedCapacity
     ? getPriceForCapacity(selectedCapacity)
     : parseFloat(product.price) || 0;
-  const isSoldOut = product.isSoldOut === true;
+  const isSoldOut = toBoolean(product.isSoldOut, false);
   const inStock = !isSoldOut;
   const brandName = typeof product.brand === 'object' && product.brand !== null
     ? product.brand.name
