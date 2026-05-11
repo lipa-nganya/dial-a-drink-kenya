@@ -27,10 +27,12 @@ GCLOUD_ACCOUNT="dialadrinkkenya254@gmail.com"
 # Override via env vars when needed.
 DEV_BACKEND_MIN_INSTANCES="${DEV_BACKEND_MIN_INSTANCES:-0}"
 DEV_BACKEND_MAX_INSTANCES="${DEV_BACKEND_MAX_INSTANCES:-1}"
-DEV_BACKEND_CPU="${DEV_BACKEND_CPU:-0.5}"
+# Cloud Run requires at least 1 CPU when concurrency is greater than 1.
+DEV_BACKEND_CPU="${DEV_BACKEND_CPU:-1}"
 DEV_BACKEND_MEMORY="${DEV_BACKEND_MEMORY:-256Mi}"
 DEV_BACKEND_TIMEOUT="${DEV_BACKEND_TIMEOUT:-90}"
-DEV_BACKEND_CONCURRENCY="${DEV_BACKEND_CONCURRENCY:-1}"
+# Keep max instances at 1 for cost, but allow parallel admin/API startup calls.
+DEV_BACKEND_CONCURRENCY="${DEV_BACKEND_CONCURRENCY:-20}"
 REVISION_KEEP_COUNT="${REVISION_KEEP_COUNT:-10}"
 
 prune_service_revisions() {

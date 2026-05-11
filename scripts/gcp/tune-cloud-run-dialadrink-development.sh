@@ -10,7 +10,7 @@
 #   ./scripts/gcp/tune-cloud-run-dialadrink-development.sh
 #
 # Optional overrides:
-#   BACKEND_MIN_INSTANCES=0 BACKEND_MAX_INSTANCES=1 BACKEND_CPU=0.5 BACKEND_MEMORY=256Mi BACKEND_CONCURRENCY=1 BACKEND_TIMEOUT=90
+#   BACKEND_MIN_INSTANCES=0 BACKEND_MAX_INSTANCES=1 BACKEND_CPU=1 BACKEND_MEMORY=256Mi BACKEND_CONCURRENCY=20 BACKEND_TIMEOUT=90
 #   DRY_RUN=1 ... (prints commands)
 #
 set -euo pipefail
@@ -20,11 +20,11 @@ REGION="${GCP_REGION:-us-central1}"
 
 BACKEND_SERVICE="${BACKEND_SERVICE:-deliveryos-development-backend}"
 
-# Dev sizing defaults (very aggressive cost mode; single user).
-BACKEND_CPU="${BACKEND_CPU:-0.5}"
+# Dev sizing defaults (low-cost single instance, with enough concurrency for admin page boot).
+BACKEND_CPU="${BACKEND_CPU:-1}"
 BACKEND_MEMORY="${BACKEND_MEMORY:-256Mi}"
 BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-90}"
-BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-1}"
+BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-20}"
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
 BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-1}"
 
