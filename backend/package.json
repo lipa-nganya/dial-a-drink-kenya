@@ -14,7 +14,8 @@
     "sync-tags-from-tec": "node scripts/sync-tags-from-tec-products-tags.js",
     "sync-tags-from-production-admin": "node scripts/sync-all-tags-from-production-admin.js",
     "collect-product-ids": "node scripts/collect-ids-by-opening-each-product.js",
-    "sync-stock-by-capacity": "node scripts/sync-all-drinks-stock-by-capacity.js"
+    "sync-stock-by-capacity": "node scripts/sync-all-drinks-stock-by-capacity.js",
+    "migrate-base64-images": "node scripts/migrate-base64-drink-images-to-gcs.js"
   },
   "keywords": [],
   "author": "",

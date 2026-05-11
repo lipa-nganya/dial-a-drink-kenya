@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Typography,
@@ -137,6 +137,9 @@ const AddPurchase = () => {
     capacity: ''
   });
   const [productSearch, setProductSearch] = useState('');
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [selectedProductsById, setSelectedProductsById] = useState({});
+  const productSearchRequestSeqRef = useRef(0);
   /** Separate from filter length so the list closes after pick (controlled open + long query would stay open). */
   const [productMenuOpen, setProductMenuOpen] = useState(false);
 
@@ -169,52 +172,62 @@ const AddPurchase = () => {
     };
   }, []);
 
-  const ensureProductsLoaded = async () => {
-    if (productsLoading) return;
-    if (Array.isArray(products) && products.length > 0) return;
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setProductSearchQuery(productSearch);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
+
+  const searchProducts = async (query) => {
+    const trimmedQuery = String(query || '').trim();
+    if (trimmedQuery.length < 2) {
+      productSearchRequestSeqRef.current += 1;
+      setProducts([]);
+      setProductsLoading(false);
+      return;
+    }
+
+    const reqSeq = productSearchRequestSeqRef.current + 1;
+    productSearchRequestSeqRef.current = reqSeq;
     setProductsLoading(true);
     try {
-      // Slim catalog (no joins), same fields POS needs including purchasePrice.
-      const prodRes = await api.get('/admin/drinks', { params: { light: 1 } });
-      setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
-    } catch (err) {
-      // Fallback to slim paged fetch only if primary POS-like endpoint fails.
-      try {
-        const all = [];
-        const pageSize = 500;
-        let offset = 0;
-        let keepLoading = true;
-
-        while (keepLoading) {
-          // eslint-disable-next-line no-await-in-loop
-          const prodRes = await api.get('/admin/drinks', {
-            params: { light: 1, summary: 1, limit: pageSize, offset }
-          });
-          const chunk = Array.isArray(prodRes.data) ? prodRes.data : [];
-          if (chunk.length === 0) {
-            keepLoading = false;
-            break;
-          }
-          all.push(...chunk);
-          offset += chunk.length;
-          keepLoading = chunk.length === pageSize;
+      const prodRes = await api.get('/admin/drinks', {
+        params: {
+          q: trimmedQuery,
+          limit: MAX_DROPDOWN_OPTIONS,
+          light: 1
         }
-
-        setProducts(all);
-      } catch (fallbackErr) {
-        console.error('Error loading products for purchase', fallbackErr);
-        setError((prev) => prev || fallbackErr.response?.data?.error || fallbackErr.message || 'Failed to load products.');
+      });
+      if (reqSeq !== productSearchRequestSeqRef.current) return;
+      const raw = prodRes.data;
+      setProducts(Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []));
+    } catch (err) {
+      if (reqSeq === productSearchRequestSeqRef.current) {
+        console.error('Error searching products for purchase', err);
+        setProducts([]);
+        setError((prev) => prev || err.response?.data?.error || err.message || 'Failed to search products.');
       }
     } finally {
-      setProductsLoading(false);
+      if (reqSeq === productSearchRequestSeqRef.current) {
+        setProductsLoading(false);
+      }
     }
   };
 
+  useEffect(() => {
+    searchProducts(productSearchQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSearchQuery]);
+
   const productsById = useMemo(() => {
     const map = new Map();
+    Object.values(selectedProductsById).forEach((p) => {
+      if (p?.id != null) map.set(p.id, p);
+    });
     products.forEach((p) => map.set(p.id, p));
     return map;
-  }, [products]);
+  }, [products, selectedProductsById]);
 
   const subtotal = useMemo(
     () =>
@@ -228,6 +241,9 @@ const AddPurchase = () => {
 
   const handleNewItemProductChange = (value) => {
     const product = value ? productsById.get(value) : null;
+    if (product?.id != null) {
+      setSelectedProductsById((prev) => ({ ...prev, [product.id]: product }));
+    }
     setProductSearch(product ? String(product.name || '') : '');
     setNewItem((prev) => {
       const options = getCapacityOptions(product || null);
@@ -493,8 +509,7 @@ const AddPurchase = () => {
               value={productsById.get(newItem.productId) || null}
               inputValue={productSearch}
               onOpen={() => {
-                ensureProductsLoaded();
-                setProductMenuOpen(true);
+                setProductMenuOpen(String(productSearch || '').trim().length >= 2);
               }}
               onClose={() => setProductMenuOpen(false)}
               onInputChange={(event, newInputValue, reason) => {
@@ -509,14 +524,16 @@ const AddPurchase = () => {
                   if (newInputValue !== label) {
                     handleNewItemProductChange('');
                     setProductSearch(newInputValue);
-                    setProductMenuOpen(true);
+                    setProductMenuOpen(String(newInputValue || '').trim().length >= 2);
                     return;
                   }
                 }
                 setProductSearch(newInputValue);
                 if (!newInputValue) {
                   handleNewItemProductChange('');
-                  setProductMenuOpen(true);
+                  setProductMenuOpen(false);
+                } else {
+                  setProductMenuOpen(String(newInputValue || '').trim().length >= 2);
                 }
               }}
               onChange={(_, value) => {
@@ -536,10 +553,16 @@ const AddPurchase = () => {
                 });
                 return filtered.slice(0, MAX_DROPDOWN_OPTIONS);
               }}
-              noOptionsText={productsLoading ? 'Loading products...' : 'No products found'}
+              noOptionsText={
+                String(productSearch || '').trim().length < 2
+                  ? 'Type at least 2 characters'
+                  : productsLoading
+                    ? 'Loading products...'
+                    : 'No products found'
+              }
               forcePopupIcon={false}
-              openOnFocus
-              open={productMenuOpen}
+              openOnFocus={false}
+              open={productMenuOpen && String(productSearch || '').trim().length >= 2}
               ListboxProps={{ style: { maxHeight: '300px' } }}
               renderOption={(props, option) => {
                 const { key, ...restProps } = props;
@@ -590,9 +613,6 @@ const AddPurchase = () => {
                   placeholder="Type product name..."
                   size="small"
                   fullWidth
-                  onFocus={() => {
-                    ensureProductsLoaded();
-                  }}
                   InputProps={{
                     ...params.InputProps,
                     endAdornment: (
