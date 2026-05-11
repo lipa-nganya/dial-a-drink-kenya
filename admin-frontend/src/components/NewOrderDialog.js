@@ -530,7 +530,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         const response = await api.get('/admin/drinks', {
           params: {
             q: trimmedQuery,
-            limit: limit || MAX_DROPDOWN_OPTIONS
+            limit: limit || MAX_DROPDOWN_OPTIONS,
+            light: 1
           }
         });
         if (reqSeq !== productSearchRequestSeqRef.current) return;
@@ -562,8 +563,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
     try {
       productsFetchPromise = (async () => {
-        // Use admin drinks endpoint so we get purchasePrice for profit/loss calculation
-        const response = await api.get('/admin/drinks');
+        // Slim list (no category joins); purchasePrice is included in light mode for profit/loss.
+        const response = await api.get('/admin/drinks', { params: { light: 1 } });
         const raw = response.data;
         const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
         persistProductsCache(productsData);

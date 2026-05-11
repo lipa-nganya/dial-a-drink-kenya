@@ -24,7 +24,8 @@ ADMIN_FE="${ADMIN_FE:-deliveryos-admin-frontend}"
 
 # Default sizing matches deploy-to-production.sh (aggressive Cloud Run cost controls).
 BACKEND_CPU="${BACKEND_CPU:-1}"
-BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
+# Match deploy-to-production.sh: 1Gi reduces heap pressure vs 512Mi for heavy JSON + Sequelize.
+BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
 BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
 BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-80}"
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"

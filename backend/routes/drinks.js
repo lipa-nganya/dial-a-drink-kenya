@@ -3,9 +3,12 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const { generateCategorySlugFromName, generateSlug } = require('../utils/slugGenerator');
+const { TtlLruCache } = require('../lib/ttlLruCache');
 
 /** Cached drink table columns — avoids information_schema on every catalog request. */
 let drinkColumnsMetaCache = null;
+const catalogListCache = new TtlLruCache(250, 2 * 60 * 1000);
+const offersCache = new TtlLruCache(5, 60 * 1000);
 
 async function loadDrinkColumnsMeta() {
   if (drinkColumnsMetaCache) return drinkColumnsMetaCache;
@@ -27,6 +30,32 @@ function parseCatalogLiteFlag(query) {
   if (raw === undefined || raw === null || raw === '') return false;
   const s = String(raw).toLowerCase();
   return s === '1' || s === 'true' || s === 'yes';
+}
+
+function setCatalogCacheHeaders(res, lite) {
+  if (lite) {
+    res.set('Cache-Control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=600');
+  } else {
+    res.set('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=900');
+  }
+}
+
+function stableQueryCacheKey(prefix, query, derived = {}) {
+  const entries = Object.entries({ ...query, ...derived })
+    .filter(([, value]) => value !== undefined && value !== null)
+    .map(([key, value]) => [key, Array.isArray(value) ? value.join(',') : String(value)])
+    .sort(([a], [b]) => a.localeCompare(b));
+  return `${prefix}:${JSON.stringify(entries)}`;
+}
+
+function toPlainJson(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => toPlainJson(item));
+  }
+  if (value && typeof value.toJSON === 'function') {
+    return value.toJSON();
+  }
+  return value;
 }
 
 function fullCatalogDrinkAttributes(colMeta) {
@@ -145,6 +174,18 @@ router.get('/', async (req, res) => {
     if (brandFocus === 'true') {
       whereClause.isBrandFocus = true;
     }
+
+    const catalogCacheKey = stableQueryCacheKey('drinks:list', req.query, {
+      __limit: queryLimit ?? 'all',
+      __offset: queryOffset ?? 0,
+      __lite: lite ? '1' : '0'
+    });
+    const cachedCatalog = catalogListCache.get(catalogCacheKey);
+    if (cachedCatalog !== undefined) {
+      setCatalogCacheHeaders(res, lite);
+      res.set('X-Cache', 'HIT');
+      return res.json(cachedCatalog);
+    }
     
     // Add query timeout to prevent hanging on database connection issues
     queryTimeout = setTimeout(() => {
@@ -219,12 +260,11 @@ router.get('/', async (req, res) => {
       console.log(`✅ Returning ${drinks.length} drinks (lite=${lite})`);
 
       if (!res.headersSent) {
-        if (lite) {
-          res.set('Cache-Control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=600');
-        } else {
-          res.set('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=900');
-        }
-        res.json(drinks);
+        const payload = toPlainJson(drinks);
+        catalogListCache.set(catalogCacheKey, payload, lite ? 2 * 60 * 1000 : 5 * 60 * 1000);
+        setCatalogCacheHeaders(res, lite);
+        res.set('X-Cache', 'MISS');
+        res.json(payload);
       }
     } catch (queryError) {
       if (queryTimeout) {
@@ -251,6 +291,12 @@ router.get('/', async (req, res) => {
 router.get('/offers', async (req, res) => {
   try {
     console.log('Fetching limited time offers...');
+    const cachedOffers = offersCache.get('current');
+    if (cachedOffers) {
+      res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+      res.set('X-Cache', 'HIT');
+      return res.json(cachedOffers);
+    }
 
     const countdown = await db.Countdown.findOne({
       where: { isActive: true },
@@ -259,6 +305,8 @@ router.get('/offers', async (req, res) => {
 
     if (!countdown) {
       console.log('No active countdown found. Returning empty offers list.');
+      res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+      offersCache.set('current', []);
       return res.json([]);
     }
 
@@ -268,6 +316,8 @@ router.get('/offers', async (req, res) => {
 
     if (now < startDate) {
       console.log('Countdown has not started yet. Returning empty offers list.');
+      res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+      offersCache.set('current', []);
       return res.json([]);
     }
 
@@ -276,6 +326,8 @@ router.get('/offers', async (req, res) => {
       if (countdown.isActive) {
         await countdown.update({ isActive: false });
       }
+      res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
+      offersCache.set('current', []);
       return res.json([]);
     }
 
@@ -299,8 +351,11 @@ router.get('/offers', async (req, res) => {
     }
 
     console.log('Limited time offers found:', offers.length);
+    const payload = toPlainJson(offers);
+    offersCache.set('current', payload);
     res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
-    res.json(offers);
+    res.set('X-Cache', 'MISS');
+    res.json(payload);
   } catch (error) {
     console.error('Error fetching offers:', error);
     res.status(500).json({ error: error.message });

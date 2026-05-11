@@ -9,8 +9,105 @@ let categoriesCache = {
   inFlight: null
 };
 
+const setPublicCategoriesCacheHeaders = (res) => {
+  res.set('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=600');
+};
+
+const categoryOrder = [
+  'Whisky',
+  'Vodka',
+  'Wine',
+  'Champagne',
+  'Brandy',
+  'Cognac',
+  'Beer',
+  'Tequila',
+  'Rum',
+  'Gin',
+  'Liqueur',
+  'Soft Drinks',
+  'Smokes'
+];
+
+async function loadActiveCategories() {
+  try {
+    return await db.Category.findAll({
+      where: { isActive: true },
+      attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt', 'slug']
+    });
+  } catch (error) {
+    if (error.message && error.message.includes('column') && error.message.includes('slug')) {
+      console.log('⚠️  slug column not found, querying without it...');
+      return db.Category.findAll({
+        where: { isActive: true },
+        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt']
+      });
+    }
+    throw error;
+  }
+}
+
+async function loadCategoryDrinkSummaries(categoryIds) {
+  if (!categoryIds.length) {
+    return { countByCategoryId: new Map(), imageByCategoryId: new Map() };
+  }
+
+  const countRows = await db.Drink.findAll({
+    where: { categoryId: { [db.Sequelize.Op.in]: categoryIds } },
+    attributes: [
+      'categoryId',
+      [db.Sequelize.fn('COUNT', db.Sequelize.col('id')), 'drinksCount']
+    ],
+    group: ['categoryId'],
+    raw: true
+  });
+
+  const imageRows = await db.sequelize.query(
+    `
+      WITH ranked_drinks AS (
+        SELECT
+          "categoryId",
+          image,
+          ROW_NUMBER() OVER (
+            PARTITION BY "categoryId"
+            ORDER BY
+              CASE
+                WHEN image LIKE '/images/%' THEN 0
+                WHEN image IS NOT NULL AND image <> '' THEN 1
+                ELSE 2
+              END,
+              id ASC
+          ) AS rn
+        FROM drinks
+        WHERE "categoryId" IN (:categoryIds)
+      )
+      SELECT "categoryId", image
+      FROM ranked_drinks
+      WHERE rn = 1
+    `,
+    {
+      replacements: { categoryIds },
+      type: db.Sequelize.QueryTypes.SELECT
+    }
+  );
+
+  return {
+    countByCategoryId: new Map(
+      countRows.map((row) => [
+        Number(row.categoryId ?? row.categoryid),
+        Number(row.drinksCount ?? row.drinkscount) || 0
+      ])
+    ),
+    imageByCategoryId: new Map(
+      imageRows.map((row) => [Number(row.categoryId ?? row.categoryid), row.image || null])
+    )
+  };
+}
+
 // Get all categories
 router.get('/', async (req, res) => {
+  setPublicCategoriesCacheHeaders(res);
+
   const now = Date.now();
   if (categoriesCache.data && categoriesCache.expiresAt > now) {
     return res.json(categoriesCache.data);
@@ -26,149 +123,72 @@ router.get('/', async (req, res) => {
   }
 
   categoriesCache.inFlight = (async () => {
-  try {
-    // Define the order of categories as they appear on dialadrinkkenya.com
-    const categoryOrder = [
-      'Whisky',
-      'Vodka',
-      'Wine',
-      'Champagne',
-      'Brandy',
-      'Cognac',
-      'Beer',
-      'Tequila',
-      'Rum',
-      'Gin',
-      'Liqueur',
-      'Soft Drinks',
-      'Smokes'
-    ];
-
-    // Query categories, handling missing slug column gracefully
-    let categories;
     try {
-      categories = await db.Category.findAll({
-        where: { isActive: true },
-        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt', 'slug'] // Explicitly list attributes
-      });
-    } catch (error) {
-      // If slug column doesn't exist, query without it
-      if (error.message && (error.message.includes('column') && error.message.includes('slug'))) {
-        console.log('⚠️  slug column not found, querying without it...');
-        categories = await db.Category.findAll({
-          where: { isActive: true },
-          attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'] // Exclude slug
-        });
-      } else {
-        throw error;
-      }
-    }
+      const categories = await loadActiveCategories();
+      const categoryIds = categories.map((category) => category.id);
+      const { countByCategoryId, imageByCategoryId } = await loadCategoryDrinkSummaries(categoryIds);
 
-    // Get counts and first image for each category
-    const categoriesWithData = await Promise.all(
-      categories.map(async (category) => {
-        const drinksCount = await db.Drink.count({
-          where: { categoryId: category.id }
-        });
-
-        // Get the first drink's image if available
-        // Prioritize backend images (/images/) over Cloudinary URLs for reliability
-        let firstDrink = await db.Drink.findOne({
-          where: { 
-            categoryId: category.id,
-            [db.Sequelize.Op.and]: [
-              { image: { [db.Sequelize.Op.ne]: null } },
-              { image: { [db.Sequelize.Op.ne]: '' } },
-              { image: { [db.Sequelize.Op.like]: '/images/%' } } // Prefer backend images
-            ]
-          },
-          attributes: ['image'],
-          order: [['id', 'ASC']]
-        });
-        
-        // Fallback to any drink with an image (including Cloudinary URLs)
-        if (!firstDrink) {
-          firstDrink = await db.Drink.findOne({
-            where: { 
-              categoryId: category.id,
-              [db.Sequelize.Op.and]: [
-                { image: { [db.Sequelize.Op.ne]: null } },
-                { image: { [db.Sequelize.Op.ne]: '' } }
-              ]
-            },
-            attributes: ['image'],
-            order: [['id', 'ASC']]
-          });
-        }
-        
-        // Final fallback to any drink if no drink with image found
-        if (!firstDrink) {
-          firstDrink = await db.Drink.findOne({
-            where: { categoryId: category.id },
-            attributes: ['image'],
-            order: [['id', 'ASC']]
-          });
-        }
-
+      const categoriesWithData = categories.map((category) => {
+        const categoryJson = typeof category.toJSON === 'function' ? category.toJSON() : category;
         return {
-          id: category.id,
-          name: category.name,
-          description: category.description,
-          isActive: category.isActive,
-          createdAt: category.createdAt,
-          updatedAt: category.updatedAt,
-          image: firstDrink?.image || null,
-          drinksCount: drinksCount
+          id: categoryJson.id,
+          name: categoryJson.name,
+          description: categoryJson.description,
+          isActive: categoryJson.isActive,
+          createdAt: categoryJson.createdAt,
+          updatedAt: categoryJson.updatedAt,
+          slug: categoryJson.slug,
+          image: imageByCategoryId.get(Number(categoryJson.id)) || null,
+          drinksCount: countByCategoryId.get(Number(categoryJson.id)) || 0
         };
-      })
-    );
+      });
 
-    // Sort categories according to the defined order
-    const sortedCategories = categoriesWithData.sort((a, b) => {
-      const indexA = categoryOrder.indexOf(a.name);
-      const indexB = categoryOrder.indexOf(b.name);
-      
-      // If both categories are in the order list, sort by their position
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
+      // Sort categories according to the defined order
+      const sortedCategories = categoriesWithData.sort((a, b) => {
+        const indexA = categoryOrder.indexOf(a.name);
+        const indexB = categoryOrder.indexOf(b.name);
+
+        // If both categories are in the order list, sort by their position
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+
+        // If only one is in the order list, prioritize it
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+
+        // If neither is in the order list, sort alphabetically
+        return a.name.localeCompare(b.name);
+      });
+
+      categoriesCache.data = sortedCategories;
+      categoriesCache.expiresAt = Date.now() + CATEGORIES_CACHE_TTL_MS;
+      return sortedCategories;
+    } catch (error) {
+      console.error('❌ Error fetching categories:', error);
+      console.error('Error stack:', error.stack);
+      console.error('Error name:', error.name);
+      console.error('Error code:', error.code);
+      // Check if it's a database connection error
+      if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError' || error.code === 'ECONNREFUSED') {
+        const err = new Error('Database connection failed');
+        err.statusCode = 503;
+        err.payload = {
+          error: 'Database connection failed',
+          message: 'Unable to connect to database. Please try again in a moment.'
+        };
+        throw err;
+      } else {
+        const err = new Error('Failed to fetch categories');
+        err.statusCode = 500;
+        err.payload = {
+          error: 'Failed to fetch categories',
+          message: error.message || 'Database query failed. Please try again in a moment.',
+          details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        };
+        throw err;
       }
-      
-      // If only one is in the order list, prioritize it
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
-      
-      // If neither is in the order list, sort alphabetically
-      return a.name.localeCompare(b.name);
-    });
-
-    categoriesCache.data = sortedCategories;
-    categoriesCache.expiresAt = Date.now() + CATEGORIES_CACHE_TTL_MS;
-    return sortedCategories;
-  } catch (error) {
-    console.error('❌ Error fetching categories:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error name:', error.name);
-    console.error('Error code:', error.code);
-    // Check if it's a database connection error
-    if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError' || error.code === 'ECONNREFUSED') {
-      const err = new Error('Database connection failed');
-      err.statusCode = 503;
-      err.payload = { 
-        error: 'Database connection failed',
-        message: 'Unable to connect to database. Please try again in a moment.'
-      };
-      throw err;
-    } else {
-      const err = new Error('Failed to fetch categories');
-      err.statusCode = 500;
-      err.payload = { 
-        error: 'Failed to fetch categories',
-        message: error.message || 'Database query failed. Please try again in a moment.',
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      };
-      throw err;
     }
-  }
   })();
 
   try {
@@ -177,6 +197,7 @@ router.get('/', async (req, res) => {
   } catch (err) {
     categoriesCache.data = null;
     categoriesCache.expiresAt = 0;
+    res.set('Cache-Control', 'no-store');
     res.status(err.statusCode || 500).json(err.payload || { error: 'Failed to fetch categories' });
   } finally {
     categoriesCache.inFlight = null;

@@ -336,10 +336,22 @@ const InventoryPage = () => {
         setLoading(true);
       }
       setError(null);
-      const [categoriesResponse, brandsResponse, drinksMetaResponse] = await Promise.all([
+      const alreadyLoadedCount = resetList ? 0 : drinks.length;
+      const refreshLimit = resetList
+        ? fetchChunkSize
+        : Math.max(fetchChunkSize, alreadyLoadedCount || fetchChunkSize);
+
+      if (resetList) {
+        setDrinks([]);
+      }
+      setDrinksLoading(true);
+      const [categoriesResponse, brandsResponse, drinksMetaResponse, drinksResponse] = await Promise.all([
         api.get('/categories'),
         api.get('/brands/all'),
-        api.get('/admin/drinks/meta').catch(() => null)
+        api.get('/admin/drinks/meta').catch(() => null),
+        api.get('/admin/drinks', {
+          params: { light: 1, summary: 1, limit: refreshLimit, offset: 0 }
+        })
       ]);
 
       const categoriesList = categoriesResponse.data || [];
@@ -349,9 +361,12 @@ const InventoryPage = () => {
       if (Number.isFinite(parsedTotalCount) && parsedTotalCount >= 0) {
         setTotalDrinkCount(parsedTotalCount);
       } else {
-        // Fallback for environments where /admin/drinks/meta isn't yet available.
-        const discoveredTotal = await discoverTotalDrinkCount();
-        setTotalDrinkCount(discoveredTotal);
+        // Rare fallback: do not block first paint — resolve total in the background.
+        void discoverTotalDrinkCount()
+          .then((discoveredTotal) => {
+            setTotalDrinkCount(discoveredTotal);
+          })
+          .catch(() => {});
       }
       const categoryById = new Map(categoriesList.map((c) => [Number(c.id), c]));
       const brandById = new Map(brandsList.map((b) => [Number(b.id), b]));
@@ -359,24 +374,15 @@ const InventoryPage = () => {
       setCategories(categoriesList);
       setBrands(brandsList);
       if (resetList) {
-        setDrinks([]);
         setFilteredDrinks([]);
         setCurrentPage(1);
         setNextDrinksOffset(0);
         setHasMoreDrinks(true);
       }
-      // Render page structure immediately; load only first page batch.
+      // First batch arrived with parallel requests above.
       if (showPageLoading) {
         setLoading(false);
       }
-      setDrinksLoading(true);
-      const alreadyLoadedCount = resetList ? 0 : drinks.length;
-      const refreshLimit = resetList
-        ? fetchChunkSize
-        : Math.max(fetchChunkSize, alreadyLoadedCount || fetchChunkSize);
-      const drinksResponse = await api.get('/admin/drinks', {
-        params: { light: 1, summary: 1, limit: refreshLimit, offset: 0 }
-      });
       const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
       const hydratedChunk = chunk.map((drink) => {
         const categoryId = Number(drink.categoryId);

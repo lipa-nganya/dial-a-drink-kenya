@@ -210,8 +210,15 @@ app.use((req, res, next) => {
 });
 
 // Serve static files (images)
-app.use('/images', express.static(path.join(__dirname, 'public/images')));
-app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+const immutableStaticOptions = {
+  maxAge: '365d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  }
+};
+app.use('/images', express.static(path.join(__dirname, 'public/images'), immutableStaticOptions));
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads'), immutableStaticOptions));
 
 // Routes
 app.use('/api/migrations', require('./routes/migrations'));

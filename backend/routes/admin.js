@@ -1388,14 +1388,18 @@ router.get('/drinks', async (req, res) => {
       'capacityPricing',
       'stock',
       'stockByCapacity',
-      'description'
+      'description',
+      'barcode',
+      'updatedAt'
     ]);
     const summaryAttrSet = new Set(['id', 'name', 'isAvailable', 'isSoldOut', 'capacity', 'capacityPricing', 'stockByCapacity', 'updatedAt']);
-    const listAttrs = summary
-      ? listAttrsBase.filter((a) => summaryAttrSet.has(a))
-      : (light
-        ? listAttrsBase.filter((a) => lightAttrSet.has(a))
-        : listAttrsBase);
+    // When both light and summary are sent (inventory list), use light — summary alone was too small and
+    // incorrectly won because summary was checked first, stripping categoryId/image/filters fields.
+    const listAttrs = light
+      ? listAttrsBase.filter((a) => lightAttrSet.has(a))
+      : summary
+        ? listAttrsBase.filter((a) => summaryAttrSet.has(a))
+        : listAttrsBase;
 
     const where = hasQuery
       ? {

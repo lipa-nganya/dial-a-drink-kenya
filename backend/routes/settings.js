@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const sharp = require('sharp');
 const { Storage } = require('@google-cloud/storage');
+const { TtlLruCache } = require('../lib/ttlLruCache');
 
 const heroImageUploadDir = path.join(__dirname, '../public/uploads/hero');
 
@@ -45,6 +46,22 @@ const cloudStorageBucket =
   process.env.FIREBASE_STORAGE_BUCKET ||
   'dialadrink-production-images';
 let storageClient = null;
+const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000;
+const settingsCache = new TtlLruCache(200, SETTINGS_CACHE_TTL_MS);
+
+const setPublicSettingsCacheHeaders = (res) => {
+  res.set('Cache-Control', 'public, max-age=600, s-maxage=600, stale-while-revalidate=600');
+};
+
+const toPlainResponse = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((item) => toPlainResponse(item));
+  }
+  if (value && typeof value.toJSON === 'function') {
+    return value.toJSON();
+  }
+  return value;
+};
 
 const getStorageClient = () => {
   if (!storageClient) {
@@ -146,7 +163,13 @@ const HOME_SETTING_KEYS = ['heroImage', 'heroImageLinkType', 'heroImageLinkTarge
 
 router.get('/home', async (req, res) => {
   try {
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+    setPublicSettingsCacheHeaders(res);
+
+    const cached = settingsCache.get('home');
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      return res.json(cached);
+    }
 
     const rows = await db.Settings.findAll({
       where: { key: HOME_SETTING_KEYS }
@@ -178,9 +201,12 @@ router.get('/home', async (req, res) => {
       result.brandFocus = { key: 'brandFocus', value: '' };
     }
 
+    settingsCache.set('home', result);
+    res.set('X-Cache', 'MISS');
     res.json(result);
   } catch (error) {
     console.error('Error fetching /settings/home:', error);
+    res.set('Cache-Control', 'no-store');
     res.status(500).json({ error: error.message });
   }
 });
@@ -188,11 +214,16 @@ router.get('/home', async (req, res) => {
 // Batch keys — must be registered before `/:key` so `/batch/...` is not captured as key=batch
 router.get('/batch/:keys', async (req, res) => {
   try {
-    // Cache for 10 minutes
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+    setPublicSettingsCacheHeaders(res);
 
     const { keys } = req.params;
     const keyArray = keys.split(',').map((k) => k.trim());
+    const cacheKey = `batch:${keyArray.slice().sort().join(',')}`;
+    const cached = settingsCache.get(cacheKey);
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      return res.json(cached);
+    }
 
     const settings = await db.Settings.findAll({
       where: { key: keyArray }
@@ -232,9 +263,12 @@ router.get('/batch/:keys', async (req, res) => {
       }
     });
 
+    settingsCache.set(cacheKey, result);
+    res.set('X-Cache', 'MISS');
     res.json(result);
   } catch (error) {
     console.error('Error fetching batch settings:', error);
+    res.set('Cache-Control', 'no-store');
     res.status(500).json({ error: 'Failed to fetch settings' });
   }
 });
@@ -242,11 +276,27 @@ router.get('/batch/:keys', async (req, res) => {
 // Get setting by key
 router.get('/:key', async (req, res) => {
   try {
-    // Cache settings for 10 minutes to reduce database load
-    // Settings like hero image, brand focus, etc. don't change frequently
-    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+    // Cache settings for 10 minutes to reduce database load.
+    // Settings like hero image, brand focus, etc. don't change frequently.
+    setPublicSettingsCacheHeaders(res);
 
     const { key } = req.params;
+    const cacheKey = `key:${key}`;
+    const cached = settingsCache.get(cacheKey);
+    if (cached) {
+      res.set('X-Cache', 'HIT');
+      return res.json(cached);
+    }
+
+    const originalJson = res.json.bind(res);
+    res.json = (payload) => {
+      const plainPayload = toPlainResponse(payload);
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        settingsCache.set(cacheKey, plainPayload);
+      }
+      return originalJson(plainPayload);
+    };
+
     const setting = await db.Settings.findOne({ where: { key } });
     
     if (!setting) {
@@ -348,11 +398,14 @@ Welcome aboard! 🎉`;
       if (key === 'seoMetaDescription') {
         return res.json({ key: 'seoMetaDescription', value: 'Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order.' });
       }
+      res.set('Cache-Control', 'no-store');
       return res.status(404).json({ error: 'Setting not found' });
     }
     
+    res.set('X-Cache', 'MISS');
     res.json(setting);
   } catch (error) {
+    res.set('Cache-Control', 'no-store');
     res.status(500).json({ error: error.message });
   }
 });
@@ -383,6 +436,8 @@ router.put('/:key', async (req, res) => {
       setting.value = value;
       await setting.save();
     }
+
+    settingsCache.clear();
     
     res.json(setting);
   } catch (error) {

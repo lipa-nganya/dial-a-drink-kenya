@@ -174,8 +174,8 @@ const AddPurchase = () => {
     if (Array.isArray(products) && products.length > 0) return;
     setProductsLoading(true);
     try {
-      // Keep the same primary behavior as POS: load from full /admin/drinks.
-      const prodRes = await api.get('/admin/drinks');
+      // Slim catalog (no joins), same fields POS needs including purchasePrice.
+      const prodRes = await api.get('/admin/drinks', { params: { light: 1 } });
       setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
     } catch (err) {
       // Fallback to slim paged fetch only if primary POS-like endpoint fails.
