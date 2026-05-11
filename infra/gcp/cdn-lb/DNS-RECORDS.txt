@@ -1,0 +1,18 @@
+IMPORTANT: Deploy updated customer/admin frontends only AFTER these A records resolve
+to the LB IP; otherwise browsers will call https://api.dialadrinkkenya.com before DNS exists.
+
+Load balancer IPv4 (from terraform apply / output load_balancer_ip):
+  34.120.17.95
+
+Create or update these DNS A records at your DNS host (Namecheap, Cloudflare, etc.):
+
+  api.dialadrinkkenya.com.     A    34.120.17.95
+  admin.dialadrinkkenya.com.   A    34.120.17.95
+  www.dialadrinkkenya.com.     A    34.120.17.95
+  dialadrinkkenya.com.         A    34.120.17.95
+
+(Use @ or apex as your provider labels the root.)
+
+After DNS propagates, the Google-managed certificate "dialadrink-cdn-cert" should move to ACTIVE (often 15–60 minutes). Check:
+
+  gcloud compute ssl-certificates describe dialadrink-cdn-cert --global --project=dialadrink-production

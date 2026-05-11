@@ -19,7 +19,7 @@ export const getBackendUrl = () => {
     hostname.includes('dialadrinkkenya.com') ||
     hostname.includes('drinksdeliverykenya.com');
   if (isProductionSite) {
-    return 'https://deliveryos-production-backend-805803410802.us-central1.run.app';
+    return 'https://api.dialadrinkkenya.com';
   }
   
   // Development sites (thewolfgang.tech)
@@ -29,7 +29,7 @@ export const getBackendUrl = () => {
   }
   
   // Fallback: Production backend URL (used for other hosted environments)
-  return 'https://deliveryos-production-backend-805803410802.us-central1.run.app';
+  return 'https://api.dialadrinkkenya.com';
 };
 
 /**

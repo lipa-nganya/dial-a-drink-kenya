@@ -135,3 +135,9 @@ DATABASE_CREDENTIALS.md
 service-account*.json
 gcloud-*.json
 .firebase/
+
+# Terraform (CDN load balancer stack)
+infra/gcp/cdn-lb/.terraform/
+infra/gcp/cdn-lb/*.tfstate
+infra/gcp/cdn-lb/*.tfstate.*
+infra/gcp/cdn-lb/crash.log

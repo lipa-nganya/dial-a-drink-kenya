@@ -48,6 +48,7 @@ const allowedOrigins = [
   // Production admin sites
   'https://admin.dialadrinkkenya.com',
   'https://www.admin.dialadrinkkenya.com',
+  'https://api.dialadrinkkenya.com',
   'https://admin.ruakadrinksdelivery.co.ke',
   'https://www.admin.ruakadrinksdelivery.co.ke',
 ].filter(Boolean);

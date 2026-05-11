@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
 const DEFAULT_DEV_API_BASE = 'https://deliveryos-development-backend-805803410802.us-central1.run.app/api';
-const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api';
+const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://api.dialadrinkkenya.com/api';
 
 const resolveApiBaseUrl = () => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -38,7 +38,7 @@ const resolveApiBaseUrl = () => {
       hostname.includes('drinksdeliverykenya.com')) {
     // Production sites - use the production backend service
     return {
-      url: 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api',
+      url: 'https://api.dialadrinkkenya.com/api',
       source: 'production-site'
     };
   }

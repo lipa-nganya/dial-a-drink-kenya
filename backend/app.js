@@ -72,11 +72,14 @@ const allowedOrigins = [
   'https://www.ruakadrinksdelivery.co.ke',
   'https://dialadrinkkenya.com',
   'https://www.dialadrinkkenya.com',
+  'https://api.dialadrinkkenya.com',
   'https://drinksdeliverykenya.com',
   'https://www.drinksdeliverykenya.com',
   // Admin production sites
   'https://admin.ruakadrinksdelivery.co.ke',
   'https://www.admin.ruakadrinksdelivery.co.ke',
+  'https://admin.dialadrinkkenya.com',
+  'https://www.admin.dialadrinkkenya.com',
   // Netlify preview URLs (wildcard pattern)
   'https://*.netlify.app'
 ].filter(Boolean);
@@ -190,6 +193,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Structured timing lines → Cloud Logging (see middleware/requestTiming.js)
+app.use(require('./middleware/requestTiming')());
 
 // Global request timeout middleware - prevent requests from hanging indefinitely
 app.use((req, res, next) => {

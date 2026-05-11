@@ -1,0 +1,26 @@
+# Copy to terraform.tfvars and fill in your real hostnames.
+# Point each hostname (A record) at the load_balancer_ip output after terraform apply.
+
+project_id = "dialadrink-production"
+region     = "us-central1"
+
+api_cloud_run_service      = "deliveryos-production-backend"
+customer_cloud_run_service = "deliveryos-customer-frontend"
+admin_cloud_run_service    = "deliveryos-admin-frontend"
+
+# Example — replace with domains you control (must match DNS + SSL cert).
+cdn_api_hosts = [
+  "api.dialadrinkkenya.com",
+]
+
+cdn_customer_hosts = [
+  "dialadrinkkenya.com",
+  "www.dialadrinkkenya.com",
+]
+
+cdn_admin_hosts = [
+  "admin.dialadrinkkenya.com",
+]
+
+# Respect Cache-Control from Cloud Run (recommended for API + HTML).
+cdn_cache_mode = "USE_ORIGIN_HEADERS"
