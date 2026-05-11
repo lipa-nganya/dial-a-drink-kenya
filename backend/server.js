@@ -55,6 +55,9 @@ const allowedOrigins = [
 
 minimalApp.use((req, res, next) => {
   const origin = req.headers.origin;
+  if (origin) {
+    res.vary('Origin');
+  }
   
   const isOriginAllowed = (originToCheck) => {
     if (!originToCheck) return false;

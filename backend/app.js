@@ -90,6 +90,9 @@ const allowedOrigins = [
 // This ensures headers are ALWAYS set, even if cors package fails
 app.use((req, res, next) => {
   const origin = req.headers.origin;
+  if (origin) {
+    res.vary('Origin');
+  }
   
   // Helper function to check if origin is allowed
   const isOriginAllowed = (originToCheck) => {
