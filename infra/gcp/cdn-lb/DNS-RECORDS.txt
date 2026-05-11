@@ -8,10 +8,20 @@ Create or update these DNS A records at your DNS host (Namecheap, Cloudflare, et
 
   api.dialadrinkkenya.com.     A    34.120.17.95
   admin.dialadrinkkenya.com.   A    34.120.17.95
+  www.admin.dialadrinkkenya.com. A  34.120.17.95
   www.dialadrinkkenya.com.     A    34.120.17.95
   dialadrinkkenya.com.         A    34.120.17.95
+  admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
+  www.admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
+  www.ruakadrinksdelivery.co.ke. A 34.120.17.95
+  ruakadrinksdelivery.co.ke.    A    34.120.17.95
 
-(Use @ or apex as your provider labels the root.)
+Use @ or apex as your provider labels the root.
+
+For hostnames currently mapped by Cloud Run Domain Mappings:
+  - replace CNAME ghs.googlehosted.com with the A record above
+  - replace the Google apex A records (216.239.32.21, 34.21, 36.21, 38.21) with 34.120.17.95
+  - remove old AAAA records unless/until this LB gets an IPv6 address
 
 After DNS propagates, the Google-managed certificate "dialadrink-cdn-cert" should move to ACTIVE (often 15–60 minutes). Check:
 

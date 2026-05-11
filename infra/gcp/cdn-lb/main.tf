@@ -138,7 +138,7 @@ resource "google_compute_global_address" "cdn" {
 
 resource "google_compute_managed_ssl_certificate" "cdn" {
   count = length(local.all_hosts) > 0 ? 1 : 0
-  name  = "${var.name_prefix}-cert"
+  name  = "${var.name_prefix}-cert-v2"
 
   managed {
     domains = local.all_hosts

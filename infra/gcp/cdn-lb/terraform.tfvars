@@ -14,10 +14,15 @@ cdn_api_hosts = [
 cdn_customer_hosts = [
   "dialadrinkkenya.com",
   "www.dialadrinkkenya.com",
+  "ruakadrinksdelivery.co.ke",
+  "www.ruakadrinksdelivery.co.ke",
 ]
 
 cdn_admin_hosts = [
   "admin.dialadrinkkenya.com",
+  "www.admin.dialadrinkkenya.com",
+  "admin.ruakadrinksdelivery.co.ke",
+  "www.admin.ruakadrinksdelivery.co.ke",
 ]
 
 cdn_cache_mode = "USE_ORIGIN_HEADERS"
