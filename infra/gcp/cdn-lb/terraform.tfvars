@@ -6,21 +6,18 @@ api_cloud_run_service      = "deliveryos-production-backend"
 customer_cloud_run_service = "deliveryos-customer-frontend"
 admin_cloud_run_service    = "deliveryos-admin-frontend"
 
-# API on dedicated subdomain (CDN + SSL). Customer/admin use existing site hostnames.
+# Dry-run CDN hostnames only. Keep primary Dial A Drink domains on Cloud Run domain mappings
+# until the Ruaka cutover has been tested end-to-end.
 cdn_api_hosts = [
-  "api.dialadrinkkenya.com",
+  "api.ruakadrinksdelivery.co.ke",
 ]
 
 cdn_customer_hosts = [
-  "dialadrinkkenya.com",
-  "www.dialadrinkkenya.com",
   "ruakadrinksdelivery.co.ke",
   "www.ruakadrinksdelivery.co.ke",
 ]
 
 cdn_admin_hosts = [
-  "admin.dialadrinkkenya.com",
-  "www.admin.dialadrinkkenya.com",
   "admin.ruakadrinksdelivery.co.ke",
   "www.admin.ruakadrinksdelivery.co.ke",
 ]

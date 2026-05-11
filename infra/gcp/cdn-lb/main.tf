@@ -138,7 +138,7 @@ resource "google_compute_global_address" "cdn" {
 
 resource "google_compute_managed_ssl_certificate" "cdn" {
   count = length(local.all_hosts) > 0 ? 1 : 0
-  name  = "${var.name_prefix}-cert-v2"
+  name  = "${var.name_prefix}-cert-v3"
 
   managed {
     domains = local.all_hosts
@@ -175,8 +175,8 @@ resource "google_compute_url_map" "cdn" {
 }
 
 resource "google_compute_target_https_proxy" "cdn" {
-  count = length(local.all_hosts) > 0 ? 1 : 0
-  name  = "${var.name_prefix}-https-proxy"
+  count   = length(local.all_hosts) > 0 ? 1 : 0
+  name    = "${var.name_prefix}-https-proxy"
   url_map = google_compute_url_map.cdn.id
   ssl_certificates = [
     google_compute_managed_ssl_certificate.cdn[0].id

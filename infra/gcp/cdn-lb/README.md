@@ -6,6 +6,12 @@ Cloud Run’s default `*.run.app` URLs **cannot** attach Cloud CDN directly. Thi
 - **Serverless NEGs** pointing at your three production Cloud Run services
 - **Cloud CDN** on each backend service (`USE_ORIGIN_HEADERS` so your existing `Cache-Control` headers drive caching)
 
+**Current intended rollout**
+
+The Terraform variables are currently set up for a **Ruaka-only dry run**. Keep the primary
+`dialadrinkkenya.com` domains on Cloud Run domain mappings until the Ruaka cutover has been
+tested end-to-end.
+
 **Routing**
 
 - Hostnames in `cdn_api_hosts` → `deliveryos-production-backend`
@@ -38,7 +44,7 @@ Put **all** customer-facing names (apex + `www`) in `cdn_customer_hosts` so they
 
 5. Wait for **managed SSL provisioning** (often 15–60 minutes after DNS is correct).
 
-6. Point apps at the new API hostname (e.g. `https://api.dialadrinkkenya.com/api/...`) instead of the raw `*.run.app` URL where you want CDN caching.
+6. For the Ruaka dry run, point apps/test traffic at the Ruaka API hostname only after the LB certificate is ACTIVE. Do not point Dial A Drink production builds at the CDN API until a later planned cutover.
 
 ## Destroy
 

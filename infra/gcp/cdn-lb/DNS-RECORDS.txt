@@ -1,16 +1,12 @@
-IMPORTANT: Deploy updated customer/admin frontends only AFTER these A records resolve
-to the LB IP; otherwise browsers will call https://api.dialadrinkkenya.com before DNS exists.
+IMPORTANT: This file is for the Ruaka dry run only.
+Keep dialadrinkkenya.com on Cloud Run domain mappings until Ruaka has been tested end-to-end.
 
 Load balancer IPv4 (from terraform apply / output load_balancer_ip):
   34.120.17.95
 
-Create or update these DNS A records at your DNS host (Namecheap, Cloudflare, etc.):
+When ready to test the dry run, create or update these DNS A records at your DNS host:
 
-  api.dialadrinkkenya.com.     A    34.120.17.95
-  admin.dialadrinkkenya.com.   A    34.120.17.95
-  www.admin.dialadrinkkenya.com. A  34.120.17.95
-  www.dialadrinkkenya.com.     A    34.120.17.95
-  dialadrinkkenya.com.         A    34.120.17.95
+  api.ruakadrinksdelivery.co.ke. A   34.120.17.95
   admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
   www.admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
   www.ruakadrinksdelivery.co.ke. A 34.120.17.95
@@ -23,6 +19,6 @@ For hostnames currently mapped by Cloud Run Domain Mappings:
   - replace the Google apex A records (216.239.32.21, 34.21, 36.21, 38.21) with 34.120.17.95
   - remove old AAAA records unless/until this LB gets an IPv6 address
 
-After DNS propagates, the Google-managed certificate "dialadrink-cdn-cert" should move to ACTIVE (often 15–60 minutes). Check:
+After DNS propagates, the Google-managed certificate should move to ACTIVE (often 15–60 minutes). Check:
 
-  gcloud compute ssl-certificates describe dialadrink-cdn-cert --global --project=dialadrink-production
+  gcloud compute ssl-certificates describe dialadrink-cdn-cert-v3 --global --project=dialadrink-production
