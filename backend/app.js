@@ -344,6 +344,11 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Dial A Drink API is running' });
 });
 
+// Match Cloud Run startup probe when configured for GET /health (see deploy / console)
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Dial A Drink API is running' });
+});
+
 // Test endpoint to verify requests are reaching the backend
 app.get('/api/test-notifications', (req, res) => {
   console.log('🧪 [TEST] /api/test-notifications hit!');

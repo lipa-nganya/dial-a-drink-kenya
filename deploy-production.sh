@@ -48,13 +48,16 @@ echo "✅ Backend image built"
 echo ""
 echo "📦 Step 2: Deploying backend to $BACKEND_SERVICE"
 echo "==============================================="
-gcloud run deploy "$BACKEND_SERVICE" \
+# TCP startup probe: avoid HTTP /health defaults that fail before Node binds (see deploy-to-production.sh)
+gcloud beta run deploy "$BACKEND_SERVICE" \
   --image "${BACKEND_IMAGE}:latest" \
   --platform managed \
   --region "$REGION" \
   --allow-unauthenticated \
   --add-cloudsql-instances "$PROD_CONNECTION" \
-  --project "$PROJECT_ID" || { echo "❌ Backend deploy failed"; exit 1; }
+  --project "$PROJECT_ID" \
+  --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+  || { echo "❌ Backend deploy failed"; exit 1; }
 BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format="value(status.url)")
 echo "✅ Backend: $BACKEND_URL"
 

@@ -104,6 +104,11 @@ minimalApp.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Dial A Drink API is running' });
 });
 
+// Cloud Run production may use a custom HTTP startup probe on /health (not /api/health)
+minimalApp.get('/health', (req, res) => {
+  res.json({ status: 'OK', message: 'Dial A Drink API is running' });
+});
+
 // Root endpoint
 minimalApp.get('/', (req, res) => {
   res.json({ 

@@ -139,7 +139,9 @@ echo ""
 
 echo "🚀 Deploying to Cloud Run (no --update-env-vars — secrets remain as configured in GCP)..."
 echo "   ⏳ Deploy waits until the new revision is ready (usually 1–4 minutes)."
-gcloud run deploy "$BACKEND_SERVICE" \
+# Pin TCP startup probe: HTTP GET /health + tight timeouts caused failed deploys when the probe
+# ran before Node bound (CONNECTION_FAILED). Match last-known-good: tcpSocket:8080, 240s window.
+gcloud beta run deploy "$BACKEND_SERVICE" \
     --image "$IMAGE_TAG" \
     --platform managed \
     --region "$REGION" \
@@ -153,6 +155,7 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --timeout="$BACKEND_TIMEOUT" \
     --concurrency="$BACKEND_CONCURRENCY" \
     --cpu-throttling \
+    --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
     --quiet \
     2>&1
 
