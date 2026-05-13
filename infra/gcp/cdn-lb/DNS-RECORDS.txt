@@ -1,24 +1,33 @@
-IMPORTANT: This file is for the Ruaka dry run only.
-Keep dialadrinkkenya.com on Cloud Run domain mappings until Ruaka has been tested end-to-end.
+Ruaka (ruakadrinksdelivery.co.ke) — Cloud Run custom domains (no global load balancer).
 
-Load balancer IPv4 (from terraform apply / output load_balancer_ip):
-  34.120.17.95
+Dial A Drink (dialadrinkkenya.com) is unchanged: keep existing DNS and Cloud Run mappings.
 
-When ready to test the dry run, create or update these DNS A records at your DNS host:
+At your DNS host, replace any A records that pointed at the old LB IP (34.120.17.95) with the
+records below. After DNS propagates, mapping status in Cloud Console / gcloud should show Ready.
 
-  api.ruakadrinksdelivery.co.ke. A   34.120.17.95
-  admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
-  www.admin.ruakadrinksdelivery.co.ke. A 34.120.17.95
-  www.ruakadrinksdelivery.co.ke. A 34.120.17.95
-  ruakadrinksdelivery.co.ke.    A    34.120.17.95
+--- Apex (root domain) — ruakadrinksdelivery.co.ke
+Use these A and AAAA records (Google site verification / Cloud Run apex pattern):
 
-Use @ or apex as your provider labels the root.
+  A     216.239.32.21
+  A     216.239.34.21
+  A     216.239.36.21
+  A     216.239.38.21
+  AAAA  2001:4860:4802:32::15
+  AAAA  2001:4860:4802:34::15
+  AAAA  2001:4860:4802:36::15
+  AAAA  2001:4860:4802:38::15
 
-For hostnames currently mapped by Cloud Run Domain Mappings:
-  - replace CNAME ghs.googlehosted.com with the A record above
-  - replace the Google apex A records (216.239.32.21, 34.21, 36.21, 38.21) with 34.120.17.95
-  - remove old AAAA records unless/until this LB gets an IPv6 address
+(Use @ or “apex” as your provider labels the root.)
 
-After DNS propagates, the Google-managed certificate should move to ACTIVE (often 15–60 minutes). Check:
+--- Subdomains — CNAME to Google frontends
 
-  gcloud compute ssl-certificates describe dialadrink-cdn-cert-v3 --global --project=dialadrink-production
+  www.ruakadrinksdelivery.co.ke       CNAME  ghs.googlehosted.com.
+  admin.ruakadrinksdelivery.co.ke     CNAME  ghs.googlehosted.com.
+  www.admin.ruakadrinksdelivery.co.ke CNAME  ghs.googlehosted.com.
+  api.ruakadrinksdelivery.co.ke       CNAME  ghs.googlehosted.com.
+
+Trailing dot on ghs.googlehosted.com is optional depending on your DNS UI.
+
+Verify mappings (project dialadrink-production, region us-central1):
+
+  gcloud beta run domain-mappings list --region=us-central1 --project=dialadrink-production

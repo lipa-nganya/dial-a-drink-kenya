@@ -66,3 +66,5 @@ variable "cdn_cache_mode" {
     error_message = "cdn_cache_mode must be a supported Cloud CDN cache mode."
   }
 }
+
+# When all cdn_* host lists are empty, no load balancer resources are created (safe idle state).

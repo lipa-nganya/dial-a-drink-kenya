@@ -1,6 +1,6 @@
 output "load_balancer_ip" {
   description = "Reserve this IPv4 in DNS (A records) for all hostnames on the managed certificate."
-  value       = google_compute_global_address.cdn.address
+  value       = try(google_compute_global_address.cdn[0].address, null)
 }
 
 output "https_forwarding_rule" {
@@ -9,11 +9,11 @@ output "https_forwarding_rule" {
 }
 
 output "backend_services" {
-  value = {
-    api      = google_compute_backend_service.api.name
-    customer = google_compute_backend_service.customer.name
-    admin    = google_compute_backend_service.admin.name
-  }
+  value = local.lb_enabled ? {
+    api      = google_compute_backend_service.api[0].name
+    customer = google_compute_backend_service.customer[0].name
+    admin    = google_compute_backend_service.admin[0].name
+  } : null
 }
 
 output "ssl_certificate_status" {
