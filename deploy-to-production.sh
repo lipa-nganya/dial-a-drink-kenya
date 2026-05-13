@@ -332,7 +332,14 @@ GCP_PROJECT_ID="$PROJECT_ID" KEEP_N=5 IMAGES="deliveryos-production-backend dial
   ./scripts/gcp/gcr-prune-keep-latest-n.sh
 
 echo ""
-echo "🗂️  Step 9: Pruning Cloud Run revisions (keep newest $REVISION_KEEP_COUNT per service)..."
+echo "🗂️  Step 9: Pruning Cloud Run revisions..."
+chmod +x ./scripts/gcp/delete-failed-cloud-run-revisions.sh
+echo "   9a) Removing revisions in error state (Ready=False) before trimming old revisions..."
+for svc in "$BACKEND_SERVICE" "$CUSTOMER_FRONTEND_SERVICE" "$ADMIN_FRONTEND_SERVICE"; do
+  echo "   --- $svc ---"
+  ./scripts/gcp/delete-failed-cloud-run-revisions.sh "$svc" "$REGION" "$PROJECT_ID" || true
+done
+echo "   9b) Removing excess old revisions (keep newest $REVISION_KEEP_COUNT per service)..."
 prune_service_revisions "$BACKEND_SERVICE" "$REVISION_KEEP_COUNT"
 prune_service_revisions "$CUSTOMER_FRONTEND_SERVICE" "$REVISION_KEEP_COUNT"
 prune_service_revisions "$ADMIN_FRONTEND_SERVICE" "$REVISION_KEEP_COUNT"
