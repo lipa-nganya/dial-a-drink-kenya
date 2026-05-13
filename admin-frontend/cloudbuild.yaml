@@ -41,6 +41,8 @@ steps:
       - '0'
       - '--max-instances'
       - '10'
+      - '--concurrency'
+      - '20'
       - '--port'
       - '8080'
       - '--set-env-vars'

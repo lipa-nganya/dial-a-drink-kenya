@@ -26,6 +26,10 @@ echo ""
 
 gcloud config set project "$PROJECT_ID"
 
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
+
 cd backend
 
 echo "🔨 Building Docker image..."
@@ -37,13 +41,22 @@ gcloud builds submit --tag "$IMAGE_TAG" . || {
 
 echo ""
 echo "🚀 Deploying to Cloud Run (preserves existing env/secrets in GCP)..."
-gcloud run deploy "$SERVICE_NAME" \
+gcloud beta run deploy "$SERVICE_NAME" \
     --image "$IMAGE_TAG" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --project "$PROJECT_ID" || {
+    --project "$PROJECT_ID" \
+    --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+    --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+    --concurrency="$CLOUD_RUN_CONCURRENCY" \
+    --cpu=1 \
+    --memory=1Gi \
+    --timeout=120 \
+    --cpu-throttling \
+    --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+    --quiet || {
     echo "❌ Deployment failed"
     exit 1
 }

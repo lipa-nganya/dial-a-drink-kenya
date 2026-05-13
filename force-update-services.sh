@@ -9,6 +9,9 @@ BACKEND_SERVICE="deliveryos-production-backend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-prod"
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -65,13 +68,22 @@ if needs_update "$BACKEND_SERVICE"; then
     }
 
     echo "Deploying new revision (image only; env unchanged in GCP)..."
-    gcloud run deploy "$BACKEND_SERVICE" \
+    gcloud beta run deploy "$BACKEND_SERVICE" \
         --image "$IMAGE_TAG" \
         --platform managed \
         --region "$REGION" \
         --allow-unauthenticated \
         --add-cloudsql-instances "$CONNECTION_NAME" \
-        --project "$PROJECT_ID" || {
+        --project "$PROJECT_ID" \
+        --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+        --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+        --concurrency="$CLOUD_RUN_CONCURRENCY" \
+        --cpu=1 \
+        --memory=1Gi \
+        --timeout=120 \
+        --cpu-throttling \
+        --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+        --quiet || {
         echo -e "${RED}❌ Backend deployment failed${NC}"
         exit 1
     }

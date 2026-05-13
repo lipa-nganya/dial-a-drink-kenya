@@ -10,6 +10,9 @@ BACKEND_SERVICE="deliveryos-production-backend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-prod"
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
 
 LOG_FILE="/tmp/deployment-$(date +%Y%m%d-%H%M%S).log"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -49,13 +52,22 @@ echo "✅ Backend image built: $IMAGE_TAG"
 echo ""
 
 echo "Deploying to Cloud Run..."
-gcloud run deploy "$BACKEND_SERVICE" \
+gcloud beta run deploy "$BACKEND_SERVICE" \
     --image "$IMAGE_TAG" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --project "$PROJECT_ID" || {
+    --project "$PROJECT_ID" \
+    --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+    --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+    --concurrency="$CLOUD_RUN_CONCURRENCY" \
+    --cpu=1 \
+    --memory=1Gi \
+    --timeout=120 \
+    --cpu-throttling \
+    --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+    --quiet || {
     echo "❌ Backend deployment failed"
     exit 1
 }

@@ -30,6 +30,10 @@ CUSTOMER_IMAGE=${CUSTOMER_IMAGE:-gcr.io/${PROJECT_ID}/drink-suite-customer-front
 ADMIN_IMAGE=${ADMIN_IMAGE:-gcr.io/${PROJECT_ID}/drink-suite-admin-frontend}
 CDN_MAP_CUSTOMER=${CDN_MAP_CUSTOMER:-}
 CDN_MAP_ADMIN=${CDN_MAP_ADMIN:-}
+# Cloud Run scaling (override per project if needed)
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
 
 if [[ -z "${PROJECT_ID}" ]]; then
   echo "PROJECT_ID must be set." >&2
@@ -68,6 +72,9 @@ deploy_backend() {
     --image "${BACKEND_IMAGE}"
     --region "${REGION}"
     --allow-unauthenticated
+    --min-instances "${CLOUD_RUN_MIN_INSTANCES}"
+    --max-instances "${CLOUD_RUN_MAX_INSTANCES}"
+    --concurrency "${CLOUD_RUN_CONCURRENCY}"
     --set-env-vars "${env_string}"
   )
   if [[ -n "${BACKEND_CLOUDSQL_INSTANCE}" ]]; then
@@ -107,7 +114,10 @@ deploy_customer_cloudrun() {
   gcloud run deploy "${CUSTOMER_SERVICE}" \
     --image "${CUSTOMER_IMAGE}" \
     --region "${REGION}" \
-    --allow-unauthenticated
+    --allow-unauthenticated \
+    --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
+    --max-instances "${CLOUD_RUN_MAX_INSTANCES}" \
+    --concurrency "${CLOUD_RUN_CONCURRENCY}"
   popd >/dev/null
 }
 
@@ -141,7 +151,10 @@ deploy_admin_cloudrun() {
   gcloud run deploy "${ADMIN_SERVICE}" \
     --image "${ADMIN_IMAGE}" \
     --region "${REGION}" \
-    --allow-unauthenticated
+    --allow-unauthenticated \
+    --min-instances "${CLOUD_RUN_MIN_INSTANCES}" \
+    --max-instances "${CLOUD_RUN_MAX_INSTANCES}" \
+    --concurrency "${CLOUD_RUN_CONCURRENCY}"
   popd >/dev/null
 }
 

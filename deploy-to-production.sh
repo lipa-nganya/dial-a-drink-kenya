@@ -21,21 +21,20 @@ PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
-# Cloud Run cost / reliability (see scripts/gcp/apply-production-cost-optimizations.sh):
-# - API scale-to-zero (min 0); occasional cold starts — frontends also scale to zero.
-# - Override BACKEND_MIN_INSTANCES=1 before deploy if you need a 24/7 warm API instance.
+# Cloud Run scaling (backend + both frontends — override per deploy if needed).
+# For a always-on API instance: BACKEND_MIN_INSTANCES=1 ./deploy-to-production.sh
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
-BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-8}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-10}"
 BACKEND_CPU="${BACKEND_CPU:-1}"
 # 1Gi: production API was OOM/GC-bound at 512Mi under admin + catalog load (May 2026). Override BACKEND_MEMORY=512Mi after query/payload tuning.
 BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
 BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
-BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-80}"
+BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-20}"
 FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
-FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-3}"
+FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-10}"
 FRONTEND_CPU="${FRONTEND_CPU:-1}"
 FRONTEND_MEMORY="${FRONTEND_MEMORY:-256Mi}"
-FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-80}"
+FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-20}"
 REVISION_KEEP_COUNT="${REVISION_KEEP_COUNT:-10}"
 
 prune_service_revisions() {

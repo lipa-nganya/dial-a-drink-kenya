@@ -12,6 +12,10 @@ BACKEND_SERVICE="deliveryos-production-backend"
 BACKEND_IMAGE="gcr.io/${PROJECT_ID}/deliveryos-production-backend"
 PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
+
 # Public site URLs (display only in summary)
 PROD_FRONTEND_URL="https://ruakadrinksdelivery.co.ke"
 PROD_ADMIN_URL="https://admin.ruakadrinksdelivery.co.ke"
@@ -58,13 +62,22 @@ gcloud builds submit --tag "$IMAGE_TAG" . || {
 }
 
 echo "🚀 Deploying backend (image only — existing env vars and secrets unchanged in GCP)..."
-gcloud run deploy "$BACKEND_SERVICE" \
+gcloud beta run deploy "$BACKEND_SERVICE" \
     --image "$IMAGE_TAG" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
-    --project "$PROJECT_ID" || {
+    --project "$PROJECT_ID" \
+    --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+    --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+    --concurrency="$CLOUD_RUN_CONCURRENCY" \
+    --cpu=1 \
+    --memory=1Gi \
+    --timeout=120 \
+    --cpu-throttling \
+    --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+    --quiet || {
     echo "❌ Backend deployment failed"
     exit 1
 }

@@ -5,6 +5,9 @@ PROJECT_ID="dialadrink-production"
 REGION="us-central1"
 SERVICE="deliveryos-production-backend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-prod"
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
 
 echo "🔍 Checking Build Status and Deploying Backend"
 echo "=============================================="
@@ -63,13 +66,22 @@ echo ""
 
 # Deploy (image only — DATABASE_URL and other secrets unchanged in GCP)
 echo "3. Deploying to Cloud Run..."
-gcloud run deploy "$SERVICE" \
+gcloud beta run deploy "$SERVICE" \
     --image "$LATEST_IMAGE" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --project "$PROJECT_ID"
+    --project "$PROJECT_ID" \
+    --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+    --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+    --concurrency="$CLOUD_RUN_CONCURRENCY" \
+    --cpu=1 \
+    --memory=1Gi \
+    --timeout=120 \
+    --cpu-throttling \
+    --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
+    --quiet
 
 echo ""
 echo "4. Verifying deployment..."

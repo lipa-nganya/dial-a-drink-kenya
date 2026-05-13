@@ -15,6 +15,11 @@ PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
+# Cloud Run scaling (all three production services; override via env if needed)
+CLOUD_RUN_MIN_INSTANCES="${CLOUD_RUN_MIN_INSTANCES:-0}"
+CLOUD_RUN_MAX_INSTANCES="${CLOUD_RUN_MAX_INSTANCES:-10}"
+CLOUD_RUN_CONCURRENCY="${CLOUD_RUN_CONCURRENCY:-20}"
+
 echo "🚀 Production deployment"
 echo "========================="
 echo "   Account: dialadrinkkenya254@gmail.com"
@@ -56,6 +61,9 @@ gcloud beta run deploy "$BACKEND_SERVICE" \
   --allow-unauthenticated \
   --add-cloudsql-instances "$PROD_CONNECTION" \
   --project "$PROJECT_ID" \
+  --min-instances="$CLOUD_RUN_MIN_INSTANCES" \
+  --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
+  --concurrency="$CLOUD_RUN_CONCURRENCY" \
   --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \
   || { echo "❌ Backend deploy failed"; exit 1; }
 BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format="value(status.url)")
