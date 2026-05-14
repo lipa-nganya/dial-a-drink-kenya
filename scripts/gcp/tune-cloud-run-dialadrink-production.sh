@@ -24,8 +24,8 @@ ADMIN_FE="${ADMIN_FE:-deliveryos-admin-frontend}"
 
 # Default sizing matches deploy-to-production.sh (min 0 / max 10 / concurrency 20 per service).
 BACKEND_CPU="${BACKEND_CPU:-1}"
-# Match deploy-to-production.sh: 1Gi reduces heap pressure vs 512Mi for heavy JSON + Sequelize.
-BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
+# Match deploy-to-production.sh (default 512Mi; override BACKEND_MEMORY=1Gi if needed).
+BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
 BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
 BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-20}"
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"

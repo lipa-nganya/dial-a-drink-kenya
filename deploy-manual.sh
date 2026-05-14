@@ -63,7 +63,7 @@ gcloud beta run deploy "$BACKEND_SERVICE" \
     --max-instances="$CLOUD_RUN_MAX_INSTANCES" \
     --concurrency="$CLOUD_RUN_CONCURRENCY" \
     --cpu=1 \
-    --memory=1Gi \
+    --memory=512Mi \
     --timeout=120 \
     --cpu-throttling \
     --startup-probe=tcpSocket.port=8080,timeoutSeconds=240,periodSeconds=240,failureThreshold=1 \

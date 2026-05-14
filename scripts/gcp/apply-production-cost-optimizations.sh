@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Applies production cost-control defaults (safe to re-run):
-#   1) Cloud Run: backend 1 vCPU / 1Gi, min 0 / max 10, concurrency 20; frontends same scaling.
+#   1) Cloud Run: backend 1 vCPU / 512Mi, min 0 / max 10, concurrency 20; frontends same scaling.
 #   2) Artifact Registry: cleanup policies from infra/gcp/artifact-registry-docker-lifecycle.json
 #   3) Prints next step for BigQuery billing export (setup-billing-export-bigquery.sh + Console link).
 #
@@ -23,14 +23,14 @@ export GCP_REGION="${REGION}"
 
 echo "=== 1) Cloud Run (tune script: scale-to-zero backend & frontends by default; right-size CPU/RAM) ==="
 export BACKEND_CPU="${BACKEND_CPU:-1}"
-export BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
+export BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
 export BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
 export BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-10}"
 export BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-20}"
 export FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
 export FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-10}"
 export FRONTEND_CPU="${FRONTEND_CPU:-1}"
-export FRONTEND_MEMORY="${FRONTEND_MEMORY:-512Mi}"
+export FRONTEND_MEMORY="${FRONTEND_MEMORY:-256Mi}"
 export FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-20}"
 
 chmod +x ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
